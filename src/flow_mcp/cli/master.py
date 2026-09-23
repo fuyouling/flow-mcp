@@ -21,7 +21,7 @@ def main() -> None:
 
     logger.info("Initializing Flow MCP Master node...")
     gateway = FlowMCPGateway()
-    gateway.run(transport=args.transport)
+    gateway.run(transport=args.transport, port=args.port)
 
 
 if __name__ == "__main__":

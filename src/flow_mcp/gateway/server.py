@@ -148,16 +148,18 @@ class FlowMCPGateway:
         await self.master_server.stop()
         logger.info("FlowMCPGateway shut down.")
 
-    def run(self, transport: str = "stdio") -> None:
+    def run(self, transport: str = "stdio", port: int = 8000) -> None:
         """Run the MCP server."""
         asyncio.run(self.initialize())
         logger.info(f"Running FastMCP server with transport='{transport}'...")
         if transport == "stdio":
             self.mcp.run(transport="stdio")
         else:
+            self.mcp.settings.port = port
             self.mcp.run(transport="sse")
 
 
 def create_gateway() -> FlowMCPGateway:
     """Gateway factory function."""
     return FlowMCPGateway()
+
