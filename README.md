@@ -2,6 +2,8 @@
 
 本项目是全新的 Google Agentspace Flow 集群原生 MCP 服务，专为分布式自动化多媒体生成而设计。
 
+> 📖 **开发调试指南**：关于单节点测试、单机模拟多 Worker、分布式联调与常见排错，请详见 [docs/debugging_guide.md](docs/debugging_guide.md)。
+
 ---
 
 ## 业务架构模式
@@ -51,7 +53,7 @@ uv pip install -e ".[dev]"
 # Stdio 模式（供 Claude Desktop / Cursor / Antigravity 使用）
 & .venv\Scripts\flow-mcp.exe master --transport stdio
 
-# 或 SSE 模式（Web API）
+# 或 SSE 模式（Web API / 开发调试推荐）
 & .venv\Scripts\flow-mcp.exe master --transport sse --port 8000
 ```
 
