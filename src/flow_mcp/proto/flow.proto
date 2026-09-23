@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+package flow_mcp;
+
+import "google/protobuf/struct.proto";
+
+// ─── FlowCluster Service ──────────────────────────────────────
+
+service FlowCluster {
+  // Bidirectional streaming between Worker and Master
+  rpc StreamTasks(stream WorkerMessage) returns (stream MasterMessage);
+}
+
+// ─── Worker → Master Messages ─────────────────────────────────
+
+message WorkerMessage {
+  oneof payload {
+    RegisterRequest   register        = 1;
+    HeartbeatRequest  heartbeat       = 2;
+    ProgressReport    progress        = 3;
+    CompletedReport   completed       = 4;
+    FailedReport      failed          = 5;
+    ProjectMapping    project_mapping = 6;
+    AccountUpdate     account_update  = 7;
+  }
+}
+
+message RegisterRequest {
+  string              worker_id        = 1;
+  string              account          = 2;
+  map<string, string> project_mappings = 3;   // alias -> local_uuid
+  repeated string     cached_assets    = 4;   // Already cached asset names
+}
+
+message HeartbeatRequest {
+  string worker_id = 1;
+}
+
+message ProgressReport {
+  string job_id           = 1;
+  string phase            = 2;
+  string message          = 3;
+  int32  progress_percent = 4;
+  string progress_text    = 5;
+  double elapsed_seconds  = 6;
+}
+
+message CompletedReport {
+  string                 job_id          = 1;
+  string                 worker_id       = 2;
+  google.protobuf.Struct result          = 3;  // Task result payload
+  repeated AssetInfo     produced_assets = 4;  // Assets produced by worker
+}
+
+message AssetInfo {
+  string name       = 1;
+  string kind       = 2;   // "image" | "character" | "video"
+  string local_path = 3;   // Worker local temp path
+}
+
+message FailedReport {
+  string job_id    = 1;
+  string worker_id = 2;
+  string error     = 3;
+}
+
+message ProjectMapping {
+  string worker_id     = 1;
+  string project_alias = 2;
+  string local_uuid    = 3;
+}
+
+message AccountUpdate {
+  string worker_id          = 1;
+  string email              = 2;
+  optional int32 balance    = 3;
+  optional int32 daily_free = 4;
+}
+
+// ─── Master → Worker Messages ─────────────────────────────────
+
+message MasterMessage {
+  oneof payload {
+    RegisterAck  ack     = 1;
+    ExecuteTask  execute = 2;
+    CancelTask   cancel  = 3;
+  }
+}
+
+message RegisterAck {
+  string worker_id = 1;
+  bool   success   = 2;
+}
+
+message ExecuteTask {
+  string                 job_id          = 1;
+  string                 task_type       = 2;
+  string                 project_alias   = 3;
+  google.protobuf.Struct params          = 4;
+  repeated string        required_assets = 5;  // Assets needed before execution
+  string                 parent_job_id   = 6;  // Non-empty for broadcast child tasks
+}
+
+message CancelTask {
+  string job_id = 1;
+}

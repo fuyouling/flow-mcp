@@ -1,0 +1,15 @@
+# Chrome startup flags for Google Flow MCP
+# All flags are optional overrides.
+flags:
+  # Disable GPU acceleration for headless/server environments
+  # - "--disable-gpu"
+  # Disable sandbox (required for some Linux environments)
+  # - "--no-sandbox"
+  # Custom window size
+  # - "--window-size=1920,1080"
+
+# Chrome remote debugging port (default: 9222)
+remote_debugging_port: 9222
+
+# Auto-launch browser on startup
+auto_launch: false

@@ -1,0 +1,176 @@
+"""WorkerExecutor: Handles task execution, JIT asset sync, browser operations, and result uploads."""
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+from typing import Any, Callable, Coroutine
+from google.protobuf.json_format import MessageToDict
+import httpx
+from loguru import logger
+
+from flow_mcp.browser.session import get_browser
+from flow_mcp.config import get_settings
+from flow_mcp.models.asset import AssetKind
+from flow_mcp.models.job import TaskType
+from flow_mcp.pages.character_page import CharacterPage
+from flow_mcp.pages.home_page import HomePage
+from flow_mcp.pages.image_page import ImagePage
+from flow_mcp.pages.video_page import VideoPage
+from flow_mcp.proto import flow_pb2
+from flow_mcp.worker.asset_syncer import AssetSyncer
+
+
+class WorkerExecutor:
+    """
+    Executes tasks on the Worker node:
+    - Resolves/creates local Flow projects
+    - JIT downloads required assets from Master
+    - Performs generation via Page Objects
+    - Uploads video results back to Master AssetHub
+    """
+
+    def __init__(
+        self,
+        worker_id: str,
+        asset_syncer: AssetSyncer | None = None,
+        master_http_url: str | None = None,
+    ):
+        settings = get_settings()
+        self.worker_id = worker_id
+        self.asset_syncer = asset_syncer or AssetSyncer(master_http_url=master_http_url)
+        self.master_http_url = (master_http_url or settings.master_http_url).rstrip("/")
+        self.project_mappings: dict[str, str] = {}
+        self.cached_assets: set[str] = set()
+
+    async def ensure_project_url(self, project_alias: str) -> str:
+        """Resolve project alias to local Flow project URL."""
+        settings = get_settings()
+        base_url = settings.google_flow_base_url
+
+        if project_alias in self.project_mappings:
+            return f"{base_url}/project/{self.project_mappings[project_alias]}"
+
+        browser = get_browser()
+        tab = browser.latest_tab
+        home = HomePage(tab)
+        home.open()
+
+        projects = home.get_projects()
+        if project_alias in projects:
+            local_uuid = projects[project_alias]["local_uuid"]
+            self.project_mappings[project_alias] = local_uuid
+            return f"{base_url}/project/{local_uuid}"
+
+        # Create project if not exists
+        logger.info(f"Worker creating new project '{project_alias}'...")
+        new_uuid = home.create_project()
+        home.open()
+        home.rename_project(new_title=project_alias, project_uuid=new_uuid)
+        self.project_mappings[project_alias] = new_uuid
+        return f"{base_url}/project/{new_uuid}"
+
+    async def _upload_result_to_hub(
+        self, file_path: Path, name: str, kind: AssetKind, job_id: str
+    ) -> dict[str, Any]:
+        """Upload produced file back to Master AssetHub."""
+        url = f"{self.master_http_url}/assets/upload"
+        logger.info(f"Uploading result {name} ({file_path}) to Master AssetHub: {url}")
+
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            with file_path.open("rb") as f:
+                files = {"file": (file_path.name, f, "video/mp4")}
+                data = {
+                    "name": name,
+                    "kind": kind.value,
+                    "worker_id": self.worker_id,
+                    "job_id": job_id,
+                }
+                resp = await client.post(url, files=files, data=data)
+                if resp.status_code != 200:
+                    raise RuntimeError(f"Asset upload failed: HTTP {resp.status_code} - {resp.text}")
+                return resp.json()
+
+    async def execute_task(
+        self,
+        task: flow_pb2.ExecuteTask,
+        progress_cb: Callable[[int, str], Coroutine[Any, Any, None]],
+    ) -> tuple[dict[str, Any], list[flow_pb2.AssetInfo]]:
+        """
+        Execute received task on worker browser.
+        Returns: (result_dict, produced_assets)
+        """
+        task_type = TaskType(task.task_type)
+        params = MessageToDict(task.params)
+        project_url = await self.ensure_project_url(task.project_alias)
+
+        browser = get_browser()
+        tab = browser.latest_tab
+
+        # JIT Asset Sync
+        for asset in task.required_assets:
+            if asset not in self.cached_assets:
+                logger.info(f"JIT syncing required asset '{asset}' before executing {task.job_id}")
+                await self.asset_syncer.sync_to_flow_project(tab, project_url, asset)
+                self.cached_assets.add(asset)
+
+        # ── 1. Broadcast Image ─────────────────────────────
+        if task_type == TaskType.BROADCAST_IMAGE:
+            asset_name = params.get("asset_name", "")
+            await self.asset_syncer.sync_to_flow_project(tab, project_url, asset_name, AssetKind.IMAGE)
+            self.cached_assets.add(asset_name)
+            return {"status": "broadcast_success", "asset_name": asset_name}, []
+
+        # ── 2. Broadcast Character ─────────────────────────
+        elif task_type == TaskType.BROADCAST_CHARACTER:
+            asset_name = params.get("asset_name", "")
+            await self.asset_syncer.sync_to_flow_project(tab, project_url, asset_name, AssetKind.CHARACTER)
+            self.cached_assets.add(asset_name)
+            return {"status": "broadcast_success", "asset_name": asset_name}, []
+
+        # ── 3. Video Create ────────────────────────────────
+        elif task_type in (TaskType.VIDEO_CREATE, TaskType.VIDEO_CREATE_BY_UPLOAD):
+            vid_page = VideoPage(tab)
+
+            def sync_progress(pct: int, txt: str):
+                asyncio.run_coroutine_threadsafe(progress_cb(pct, txt), asyncio.get_event_loop())
+
+            def run_gen():
+                assets_list = [a.strip() for a in params.get("assets", "").split(",") if a.strip()]
+                return vid_page.generate_video(
+                    project_url=project_url,
+                    prompt=params.get("prompt", ""),
+                    model_name=params.get("model_name", "Omni 1.1 Flash"),
+                    resolution=params.get("resolution", "720p"),
+                    quantity=f"x{params.get('quantity', 1)}",
+                    assets=assets_list,
+                    rename_name=params.get("video_name", f"video_{task.job_id[:8]}"),
+                    download=params.get("download", "720p"),
+                    progress_callback=sync_progress,
+                )
+
+            gen_result = await asyncio.to_thread(run_gen)
+            local_path = gen_result.get("local_path")
+            video_name = gen_result.get("video_name")
+
+            if not local_path or not Path(local_path).is_file():
+                raise RuntimeError(f"Video generation succeeded but local downloaded file missing: {local_path}")
+
+            # Upload video back to Master AssetHub
+            hub_record = await self._upload_result_to_hub(
+                file_path=Path(local_path),
+                name=video_name,
+                kind=AssetKind.VIDEO,
+                job_id=task.job_id,
+            )
+
+            produced = [
+                flow_pb2.AssetInfo(
+                    name=video_name,
+                    kind="video",
+                    local_path=str(local_path),
+                )
+            ]
+            return {"video_name": video_name, "asset_hub": hub_record}, produced
+
+        else:
+            raise NotImplementedError(f"Unsupported task type on worker: {task_type}")
