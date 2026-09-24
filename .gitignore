@@ -16,6 +16,4 @@ logs/
 *.log
 .pytest_cache/
 .ruff_cache/
-src/flow_mcp/proto/*_pb2.py
-src/flow_mcp/proto/*_pb2_grpc.py
 src/flow_mcp/proto/*_pb2.pyi
