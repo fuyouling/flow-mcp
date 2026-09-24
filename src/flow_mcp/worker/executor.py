@@ -33,11 +33,13 @@ class WorkerExecutor:
         worker_id: str,
         asset_syncer: AssetSyncer | None = None,
         master_http_url: str | None = None,
+        on_project_mapping_added: Callable[[str, str], Coroutine[Any, Any, None]] | None = None,
     ):
         settings = get_settings()
         self.worker_id = worker_id
         self.asset_syncer = asset_syncer or AssetSyncer(master_http_url=master_http_url)
         self.master_http_url = (master_http_url or settings.master_http_url).rstrip("/")
+        self.on_project_mapping_added = on_project_mapping_added
         self.project_mappings: dict[str, str] = {}
         self.cached_assets: set[str] = set()
 
@@ -64,9 +66,19 @@ class WorkerExecutor:
         # Create project if not exists
         logger.info(f"Worker creating new project '{project_alias}'...")
         new_uuid = home.create_project()
-        home.open()
-        home.rename_project(new_title=project_alias, project_uuid=new_uuid)
+        
+        # Retry renaming up to 3 times
+        for attempt in range(3):
+            home.open()
+            if home.rename_project(new_title=project_alias, project_uuid=new_uuid):
+                break
+            logger.warning(f"Project card not found yet (attempt {attempt+1}/3), retrying in 3s...")
+            await asyncio.sleep(3)
+            
         self.project_mappings[project_alias] = new_uuid
+        if self.on_project_mapping_added:
+            await self.on_project_mapping_added(project_alias, new_uuid)
+            
         return f"{base_url}/project/{new_uuid}"
 
     async def _upload_result_to_hub(

@@ -34,14 +34,25 @@ class WorkerClient:
         self.master_http_url = master_http_url or settings.master_http_url
         self.heartbeat_interval = heartbeat_interval
 
-        self.executor = WorkerExecutor(
-            worker_id=self.worker_id,
-            master_http_url=self.master_http_url,
-        )
-
         self._running = False
         self._out_queue: asyncio.Queue[flow_pb2.WorkerMessage] = asyncio.Queue()
         self._current_task_handle: asyncio.Task | None = None
+
+        async def _on_project_mapping_added(alias: str, local_uuid: str):
+            msg = flow_pb2.WorkerMessage(
+                project_mapping=flow_pb2.ProjectMapping(
+                    worker_id=self.worker_id,
+                    project_alias=alias,
+                    local_uuid=local_uuid,
+                )
+            )
+            await self._out_queue.put(msg)
+
+        self.executor = WorkerExecutor(
+            worker_id=self.worker_id,
+            master_http_url=self.master_http_url,
+            on_project_mapping_added=_on_project_mapping_added,
+        )
 
     async def start(self) -> None:
         """Start worker client connection and reconnection loop."""
