@@ -128,15 +128,17 @@ class WorkerExecutor:
         # ── 1. Broadcast Image ─────────────────────────────
         if task_type == TaskType.BROADCAST_IMAGE:
             asset_name = params.get("asset_name", "")
-            await self.asset_syncer.sync_to_flow_project(tab, project_url, asset_name, AssetKind.IMAGE)
-            self.cached_assets.add(asset_name)
+            if asset_name and asset_name not in self.cached_assets:
+                await self.asset_syncer.sync_to_flow_project(tab, project_url, asset_name, AssetKind.IMAGE)
+                self.cached_assets.add(asset_name)
             return {"status": "broadcast_success", "asset_name": asset_name}, []
 
         # ── 2. Broadcast Character ─────────────────────────
         elif task_type == TaskType.BROADCAST_CHARACTER:
             asset_name = params.get("asset_name", "")
-            await self.asset_syncer.sync_to_flow_project(tab, project_url, asset_name, AssetKind.CHARACTER)
-            self.cached_assets.add(asset_name)
+            if asset_name and asset_name not in self.cached_assets:
+                await self.asset_syncer.sync_to_flow_project(tab, project_url, asset_name, AssetKind.CHARACTER)
+                self.cached_assets.add(asset_name)
             return {"status": "broadcast_success", "asset_name": asset_name}, []
 
         # ── 3. Video Create ────────────────────────────────

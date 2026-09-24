@@ -1,9 +1,10 @@
 """Project management MCP tools."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Annotated
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 
 from flow_mcp.browser.session import get_browser
 from flow_mcp.config import get_settings
@@ -15,8 +16,13 @@ def register_project_tools(mcp: FastMCP, project_dao: ProjectDAO) -> None:
     """Register project-related MCP tools."""
 
     @mcp.tool(name="website_open", description="Open Google Flow website in browser")
-    async def website_open(url: str = "") -> dict[str, Any]:
-        """Navigate browser to Flow website or specific URL."""
+    async def website_open(
+        url: Annotated[str, Field(description="要打开的 URL，默认 Google Flow 首页")] = ""
+    ) -> dict[str, Any]:
+        """
+        使用 DrissionPage 操控 Chromium 打开指定网页。
+        未提供 url，默认打开 Google Flow 首页（确保具有登录状态）。
+        """
         target = url or get_settings().google_flow_base_url
         browser = get_browser()
         tab = browser.latest_tab
@@ -28,7 +34,10 @@ def register_project_tools(mcp: FastMCP, project_dao: ProjectDAO) -> None:
 
     @mcp.tool(name="project_list", description="List all Google Flow projects")
     async def project_list() -> dict[str, Any]:
-        """List all projects discovered on Flow and in local database."""
+        """
+        列出当前账户下所有的 Google Flow 项目。
+        默认从本地数据库同步以保证速度。
+        """
         browser = get_browser()
         tab = browser.latest_tab
         assert not isinstance(tab, str)
@@ -47,8 +56,13 @@ def register_project_tools(mcp: FastMCP, project_dao: ProjectDAO) -> None:
         }
 
     @mcp.tool(name="project_open", description="Open a specific Google Flow project by name")
-    async def project_open(project_name: str = "default") -> dict[str, Any]:
-        """Open a project in the browser, creating it if it does not exist."""
+    async def project_open(
+        project_name: Annotated[str, Field(description="要打开的 Google Flow 项目的名称")] = "default"
+    ) -> dict[str, Any]:
+        """
+        直接根据项目名称在浏览器中打开对应的 Google Flow 项目。
+        它会利用本地缓存快速定位并加载页面。如果提示找不到，请先执行 `project_list` 刷新缓存。
+        """
         browser = get_browser()
         tab = browser.latest_tab
         assert not isinstance(tab, str)
@@ -75,13 +89,24 @@ def register_project_tools(mcp: FastMCP, project_dao: ProjectDAO) -> None:
         return {"status": "success", "project_name": project_name, "url": url, "created": True}
 
     @mcp.tool(name="project_create", description="Create a new Google Flow project")
-    async def project_create(project_name: str) -> dict[str, Any]:
-        """Explicitly create and name a new Flow project."""
+    async def project_create(
+        project_name: Annotated[str, Field(description="新项目的名称，留空则为 'Untitled project'")]
+    ) -> dict[str, Any]:
+        """
+        在 Google Flow 中创建一个新项目，并可选择性地重命名。
+        返回新项目的 project_name 和 url。
+        """
         return await project_open(project_name)
 
     @mcp.tool(name="project_rename", description="Rename a Google Flow project")
-    async def project_rename(old_name: str, new_name: str) -> dict[str, Any]:
-        """Rename an existing project."""
+    async def project_rename(
+        old_name: Annotated[str, Field(description="需要重命名的 Google Flow 项目的当前名称")],
+        new_name: Annotated[str, Field(description="项目的新名称")]
+    ) -> dict[str, Any]:
+        """
+        在 Google Flow 首页将指定的项目重命名。
+        注意：这需要在 UI 层面操作，请确保项目名称存在。
+        """
         browser = get_browser()
         tab = browser.latest_tab
         assert not isinstance(tab, str)

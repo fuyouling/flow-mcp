@@ -1,9 +1,10 @@
 """Queue and cluster status MCP tools."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Annotated
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 
 from flow_mcp.control.credit_manager import CreditManager
 from flow_mcp.control.job_registry import JobRegistry
@@ -23,7 +24,12 @@ def register_queue_tools(
 
     @mcp.tool(name="task_queue_status", description="Query cluster task queue and connected worker status")
     async def task_queue_status() -> dict[str, Any]:
-        """Get summary of active jobs, workers, and accounts."""
+        """
+        查询 Google Flow MCP 全局任务队列的当前状态。
+        
+        【用途与返回字段说明】
+        可以获取当前激活的任务(排队或进行中)列表，以及连接的 worker 状态、可用账号等概览信息。
+        """
         workers = await worker_pool.list_workers()
         active_jobs = await job_registry.list_active_jobs()
         accounts = await credit_manager.list_accounts()
@@ -61,8 +67,17 @@ def register_queue_tools(
         }
 
     @mcp.tool(name="task_cancel", description="Cancel an active or queued task by job_id")
-    async def task_cancel(job_id: str) -> dict[str, Any]:
-        """Cancel a job."""
+    async def task_cancel(
+        job_id: Annotated[str, Field(description="要取消的任务唯一 ID (job_id)")]
+    ) -> dict[str, Any]:
+        """
+        取消指定的生成任务（包括排队中任务及正在执行中的任务）。
+        
+        【执行规则】
+        1. 若任务正在排队中：立即从队列中移除并标记为 cancelled，后续任务自动前移。
+        2. 若任务正在执行中：触发取消中断信号，重置相关资源并标记为 cancelled。
+        3. 若任务已结束或不存在：返回相应提示信息。
+        """
         job = await job_registry.get_job(job_id)
         if not job:
             return {"status": "error", "message": f"Job '{job_id}' not found."}

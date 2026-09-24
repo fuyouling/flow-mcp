@@ -118,8 +118,23 @@ class FlowMCPGateway:
         await init_db()
         await self.job_registry.initialize()
 
+        # Inspect local account info from browser for Master
+        account_email = ""
+        credits_val = None
+        try:
+            from flow_mcp.browser.session import get_browser
+            from flow_mcp.pages.home_page import HomePage
+
+            browser = get_browser()
+            home = HomePage(browser.latest_tab)
+            home.open()
+            account_email = home.get_account_email() or ""
+            credits_val = home.get_credits()
+        except Exception as e:
+            logger.debug(f"Master pre-flight browser inspection note: {e}")
+
         # Register Master's Worker 0 in pool
-        local_account = self.settings.worker_account or "master_local@google.com"
+        local_account = account_email or self.settings.worker_account or "master_local@google.com"
         await self.worker_pool.register_worker(
             worker_id="master_local_worker",
             account=local_account,
@@ -129,6 +144,7 @@ class FlowMCPGateway:
             await self.credit_manager.update_from_worker(
                 worker_id="master_local_worker",
                 email=local_account,
+                balance=credits_val,
                 daily_free=50,
             )
 
