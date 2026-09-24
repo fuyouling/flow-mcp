@@ -70,9 +70,43 @@ class AssetSyncer:
                 target_name=asset_name,
             )
         elif kind == AssetKind.CHARACTER:
-            page = CharacterPage(tab)
-            page.navigate_to_characters(project_url)
-            page.click_new_character()
-            page.upload_portrait(str(local_file))
-            page.save_character()
+            logger.warning("AssetKind.CHARACTER should use sync_character_to_flow_project directly.")
         logger.info(f"Asset '{asset_name}' successfully synced into Flow project.")
+
+    async def sync_character_to_flow_project(
+        self,
+        tab,
+        project_url: str,
+        character_name: str,
+        has_portrait: bool,
+        has_fullbody: bool,
+        voice_name: str = "",
+        voice_style: str = "",
+    ) -> None:
+        """Download character assets and recreate the character on the worker's project."""
+        logger.info(f"Syncing character '{character_name}' to project {project_url}...")
+        
+        portrait_local = None
+        if has_portrait:
+            portrait_local = await self.download_from_hub(f"{character_name}_Portrait")
+            
+        fullbody_local = None
+        if has_fullbody:
+            fullbody_local = await self.download_from_hub(f"{character_name}_Fullbody")
+            
+        page = CharacterPage(tab)
+        page.navigate_to_characters(project_url)
+        page.click_new_character()
+        
+        if portrait_local:
+            page.upload_portrait(str(portrait_local))
+            
+        if fullbody_local:
+            page.upload_fullbody(str(fullbody_local))
+            
+        if voice_name:
+            page.configure_voice(voice_name, voice_style)
+            
+        page.rename_character(character_name)
+        page.save_character()
+        logger.info(f"Character '{character_name}' successfully synced into Flow project.")

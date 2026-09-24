@@ -233,10 +233,7 @@ class CharacterPage(BasePage):
     def rename_character(self, name: str) -> bool:
         """Rename character in character editor."""
         logger.info(f"Renaming character to '{name}'...")
-        name_input = self.tab.ele(
-            'xpath://input[@placeholder="角色名称" or @aria-label="角色名称" or contains(@placeholder, "角色")]',
-            timeout=3,
-        )
+        name_input = self.tab.ele('xpath://input[@placeholder="角色名称"]', timeout=3)
         if not name_input:
             logger.warning("Character name input not found.")
             return False

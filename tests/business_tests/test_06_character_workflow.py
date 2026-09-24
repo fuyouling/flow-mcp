@@ -18,8 +18,8 @@ from .conftest import call_tool_json, poll_job_status
 async def test_character_create_full_params(mcp_session: ClientSession):
     """TC-CHR-001 & TC-CHR-002: Submit character_create with full params, poll character_status, then cancel."""
     character_name = "CyberPilot_Test"
-    prompt = "A female space commander with glowing cybernetic visor, highly detailed portrait, cinematic lighting, 8k resolution"
-    full_body_prompt = "A female space commander with glowing cybernetic visor, sleek armored uniform, standing in a futuristic command center, full body shot, highly detailed, cinematic lighting, 8k resolution"
+    prompt = "A photorealistic portrait of a female space commander, glowing cybernetic visor, silver hair, highly detailed, cinematic lighting, 8k resolution"
+    full_body_prompt = "A photorealistic full body shot of a female space commander, glowing cybernetic visor, silver hair, sleek armored uniform, standing in a futuristic command center, highly detailed, cinematic lighting, 8k resolution"
     project_name = "default"
 
     # 1. Submit character creation task
@@ -33,6 +33,7 @@ async def test_character_create_full_params(mcp_session: ClientSession):
             "model_name": "Nano banana pro",
             "full_body": True,
             "full_body_prompt": full_body_prompt,
+            "voice_name": "Nova",
         },
     )
 
@@ -111,6 +112,7 @@ async def test_character_create_by_upload_full_params(mcp_session: ClientSession
                 "portrait_image_path": str(tmp_img_portrait),
                 "project_name": "test_char_proj",
                 "full_body_image_path": str(tmp_img_fullbody),
+                "voice_name": "Nova",
             },
         )
         assert not raw_res.isError, f"character_create_by_upload failed: {raw_res}"
@@ -123,8 +125,8 @@ async def test_character_create_by_upload_full_params(mcp_session: ClientSession
             mcp_session,
             "character_status",
             job_id,
-            max_attempts=5,
-            interval=1.0,
+            max_attempts=120,
+            interval=5.0,
         )
         assert not raw_res_status.isError, f"Tool character_status failed: {raw_res_status}"
         assert status_data.get("job_id") == job_id

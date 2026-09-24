@@ -227,27 +227,15 @@ class ImageCharacterService:
                 )
 
             await self.job_registry.update_status(job.job_id, phase=JobPhase.BROADCASTING)
-            broadcast_results = {}
-            if portrait_path and Path(portrait_path).is_file():
-                broadcast_results = await self._broadcast_asset(
-                    asset_name=f"{char_name}_Portrait",
-                    kind=AssetKind.CHARACTER,
-                    project_alias=job.spec.project_alias,
-                    parent_job=job,
-                )
-            
-            if fullbody_path and Path(fullbody_path).is_file():
-                fb_broadcast = await self._broadcast_asset(
-                    asset_name=f"{char_name}_Fullbody",
-                    kind=AssetKind.CHARACTER,
-                    project_alias=job.spec.project_alias,
-                    parent_job=job,
-                )
-                for wid, status in fb_broadcast.items():
-                    if status == "failed":
-                        broadcast_results[wid] = "failed"
-                    elif wid not in broadcast_results:
-                        broadcast_results[wid] = status
+            broadcast_results = await self._broadcast_character(
+                character_name=char_name,
+                has_portrait=bool(portrait_path and Path(portrait_path).is_file()),
+                has_fullbody=bool(fullbody_path and Path(fullbody_path).is_file()),
+                voice_name=params.voice_name if hasattr(params, "voice_name") else "",
+                voice_style=params.voice_style if hasattr(params, "voice_style") else "",
+                project_alias=job.spec.project_alias,
+                parent_job=job,
+            )
 
             await self.job_registry.update_status(
                 job.job_id,
@@ -286,27 +274,15 @@ class ImageCharacterService:
                 )
 
             await self.job_registry.update_status(job.job_id, phase=JobPhase.BROADCASTING)
-            broadcast_results = {}
-            if params.portrait_image_path and Path(params.portrait_image_path).is_file():
-                broadcast_results = await self._broadcast_asset(
-                    asset_name=f"{char_name}_Portrait",
-                    kind=AssetKind.CHARACTER,
-                    project_alias=job.spec.project_alias,
-                    parent_job=job,
-                )
-            
-            if params.full_body_image_path and Path(params.full_body_image_path).is_file():
-                fb_broadcast = await self._broadcast_asset(
-                    asset_name=f"{char_name}_Fullbody",
-                    kind=AssetKind.CHARACTER,
-                    project_alias=job.spec.project_alias,
-                    parent_job=job,
-                )
-                for wid, status in fb_broadcast.items():
-                    if status == "failed":
-                        broadcast_results[wid] = "failed"
-                    elif wid not in broadcast_results:
-                        broadcast_results[wid] = status
+            broadcast_results = await self._broadcast_character(
+                character_name=char_name,
+                has_portrait=bool(params.portrait_image_path and Path(params.portrait_image_path).is_file()),
+                has_fullbody=bool(params.full_body_image_path and Path(params.full_body_image_path).is_file()),
+                voice_name=params.voice_name if hasattr(params, "voice_name") else "",
+                voice_style=params.voice_style if hasattr(params, "voice_style") else "",
+                project_alias=job.spec.project_alias,
+                parent_job=job,
+            )
 
             await self.job_registry.update_status(
                 job.job_id,
@@ -383,4 +359,73 @@ class ImageCharacterService:
                 results[wid] = "failed"
 
         logger.info(f"Broadcast of asset '{asset_name}' completed. Results: {results}")
+        return results
+
+    async def _broadcast_character(
+        self,
+        character_name: str,
+        has_portrait: bool,
+        has_fullbody: bool,
+        voice_name: str,
+        voice_style: str,
+        project_alias: str,
+        parent_job: Job,
+        timeout: float = 120.0,
+    ) -> dict[str, str]:
+        """Broadcast character info in parallel to all connected remote workers."""
+        workers = await self.worker_pool.list_workers()
+        target_workers = [w for w in workers if w.worker_id != "master_local_worker"]
+
+        if not target_workers:
+            logger.info("No remote workers currently connected; broadcast step skipped.")
+            return {}
+
+        results: dict[str, str] = {}
+        child_jobs: list[Job] = []
+
+        params = {
+            "character_name": character_name,
+            "has_portrait": has_portrait,
+            "has_fullbody": has_fullbody,
+            "voice_name": voice_name,
+            "voice_style": voice_style,
+        }
+
+        for w in target_workers:
+            child_spec = JobSpec(
+                task_type=TaskType.BROADCAST_CHARACTER,
+                project_alias=project_alias,
+                params=params,
+                target_worker_id=w.worker_id,
+                parent_job_id=parent_job.job_id,
+                cost_credits=0,
+            )
+            child_job = await self.job_registry.register_job(child_spec)
+            child_jobs.append(child_job)
+            await self.scheduler.submit(child_spec)
+
+        # Wait for child jobs completion up to timeout
+        start = time.time()
+        while time.time() - start < timeout:
+            all_done = True
+            for c in child_jobs:
+                st = await self.job_registry.get_status(c.job_id)
+                if not st or not st.is_finished:
+                    all_done = False
+                    break
+            if all_done:
+                break
+            await asyncio.sleep(1.0)
+
+        # Collect results
+        for c in child_jobs:
+            st = await self.job_registry.get_status(c.job_id)
+            wid = c.spec.target_worker_id or "unknown"
+            if st and st.phase == JobPhase.COMPLETED:
+                results[wid] = "success"
+                await self.worker_pool.add_cached_asset(wid, character_name)
+            else:
+                results[wid] = "failed"
+
+        logger.info(f"Broadcast of character '{character_name}' completed. Results: {results}")
         return results
