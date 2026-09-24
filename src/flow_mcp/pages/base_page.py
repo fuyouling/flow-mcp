@@ -34,6 +34,18 @@ class BasePage:
             logger.error(f"Failed navigating to {url}: {e}")
             raise PageTimeoutError(f"Navigation to {url} failed: {e}") from e
 
+    def check_and_handle_refresh_prompt(self) -> None:
+        """Check for '刷新并重试' prompt and refresh the page if present."""
+        try:
+            import time
+            prompt = self.tab.ele('xpath://div[contains(text(),"刷新并重试")]', timeout=1)
+            if prompt:
+                logger.warning("Detected '刷新并重试' prompt. Refreshing the page...")
+                self.tab.refresh()
+                time.sleep(2)
+        except Exception as e:
+            logger.debug(f"Refresh prompt check failed: {e}")
+
     def wait_for_element(self, selector: str, timeout: float = 10.0) -> Any:
         """Wait for an element to appear in DOM and be accessible."""
         logger.debug(f"Waiting for element: '{selector}' (timeout={timeout}s)")

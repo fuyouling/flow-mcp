@@ -291,6 +291,8 @@ class VideoPage(BasePage):
         if self.tab.url != project_url:
             self.tab.get(project_url)
             time.sleep(3)
+        
+        self.check_and_handle_refresh_prompt()
 
         self.apply_settings(
             mode=mode,
