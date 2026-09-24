@@ -355,7 +355,17 @@ class VideoPage(BasePage):
             tile.click()
         except Exception:
             tile.click(by_js=True)
-        time.sleep(1)
+        time.sleep(1.5)
+
+        if self.tab.ele('xpath://span[text()="所有媒体"]', timeout=1):
+            logger.warning("Still on project page after clicking tile, trying again...")
+            try:
+                tile.click(by_js=True)
+            except Exception:
+                pass
+            time.sleep(1.5)
+            if self.tab.ele('xpath://span[text()="所有媒体"]', timeout=1):
+                raise RuntimeError("Failed to enter details page after multiple click attempts.")
 
         edit_page = VideoEditPage(self.tab)
         final_name = rename_name or f"video_{int(time.time())}"

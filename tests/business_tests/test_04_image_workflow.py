@@ -17,7 +17,7 @@ from .conftest import call_tool_json, poll_job_status
 @pytest.mark.asyncio
 async def test_image_create_full_params(mcp_session: ClientSession):
     """TC-IMG-001 & TC-IMG-002: Submit image_create with full params, poll image_status, then cancel."""
-    prompt = "A Cyanopica cyanus flies in the sky"
+    prompt = "Grey-tailed sandpiper drinking water"
     project_name = "default"
 
     # 1. Submit text-to-image task
@@ -30,8 +30,8 @@ async def test_image_create_full_params(mcp_session: ClientSession):
             "aspect_ratio": "16:9",
             "model_name": "Nano Banana Pro",
             "quantity": 1,
-            "image_name": "Cyanopica_cyanus",
-            "assets": "dummy_asset_id",
+            "image_name": "Gray-tailed_drifting",
+            "assets": "",
             "download": "2K",
         },
     )
