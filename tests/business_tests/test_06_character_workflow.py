@@ -33,7 +33,7 @@ async def test_character_create_full_params(mcp_session: ClientSession):
             "model_name": "Nano banana pro",
             "full_body": True,
             "full_body_prompt": full_body_prompt,
-            "voice_name": "Nova",
+            "voice_name": "achird",
         },
     )
 

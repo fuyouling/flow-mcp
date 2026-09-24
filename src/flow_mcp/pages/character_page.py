@@ -164,7 +164,11 @@ class CharacterPage(BasePage):
             logger.warning("Generate Fullbody button not found.")
             return ""
 
-        fullbody_btn.click()
+        try:
+            fullbody_btn.click(by_js=True)
+        except Exception as e:
+            logger.warning(f"JS click on fullbody button failed: {e}, attempting regular click...")
+            fullbody_btn.click()
         time.sleep(2)
 
         if prompt:
