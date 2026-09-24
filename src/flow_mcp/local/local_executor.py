@@ -136,7 +136,7 @@ class LocalExecutor:
             char_page.navigate_to_characters(project_url)
             char_page.click_new_character()
 
-            portrait_b64 = char_page.generate_portrait(params.prompt, params.model_name)
+            char_page.generate_portrait(params.prompt, params.model_name)
             char_page.rename_character(params.character_name)
             
             portrait_path = ""
@@ -158,7 +158,6 @@ class LocalExecutor:
                 "character_name": params.character_name,
                 "portrait_path": portrait_path,
                 "fullbody_path": fullbody_path,
-                "portrait_b64": portrait_b64,
             }
 
         return await asyncio.to_thread(run_sync)

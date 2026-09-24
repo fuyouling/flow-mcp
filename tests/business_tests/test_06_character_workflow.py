@@ -130,16 +130,7 @@ async def test_character_create_by_upload_full_params(mcp_session: ClientSession
         )
         assert not raw_res_status.isError, f"Tool character_status failed: {raw_res_status}"
         assert status_data.get("job_id") == job_id
-        assert status_data.get("phase") in (
-            "pending",
-            "scheduled",
-            "running",
-            "master_running",
-            "broadcasting",
-            "completed",
-            "failed",
-            "cancelled",
-        )
+        assert status_data.get("phase") == "completed", f"Job failed or timed out: {status_data}"
 
         # 3. Clean up task
         await call_tool_json(mcp_session, "task_cancel", {"job_id": job_id})

@@ -215,15 +215,22 @@ class CharacterPage(BasePage):
             search_input.input(voice_name)
             time.sleep(1)
             
-        # Click the voice item
-        voice_item = self.tab.ele(f'xpath://*[contains(text(), "{voice_name}")]', timeout=2)
-        if voice_item:
-            # Emulate pointer events as per docs
-            voice_item.run_js("this.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true})); this.dispatchEvent(new PointerEvent('mousedown', {bubbles: true}));")
-            time.sleep(0.1)
-            voice_item.run_js("this.dispatchEvent(new PointerEvent('pointerup', {bubbles: true})); this.dispatchEvent(new PointerEvent('mouseup', {bubbles: true}));")
-            voice_item.click()
-            time.sleep(1)
+        # Check if the voice was found
+        not_found = self.tab.ele('xpath://span[contains(text(),"未找到资源")]', timeout=1)
+        if not_found:
+            logger.warning(f"Voice '{voice_name}' not found.")
+            close_btn = self.tab.ele('xpath://button[@aria-label="关闭"]', timeout=2)
+            if close_btn:
+                close_btn.click()
+                time.sleep(1)
+        else:
+            add_btn = self.tab.ele('xpath://span[contains(text(),"添加到角色")]', timeout=2)
+            if add_btn:
+                try:
+                    add_btn.click()
+                except Exception:
+                    add_btn.click(by_js=True)
+                time.sleep(1)
             
         if voice_style:
             style_input = self.tab.ele('css:textarea[placeholder*="口音"], textarea[placeholder*="accent"]', timeout=1)
