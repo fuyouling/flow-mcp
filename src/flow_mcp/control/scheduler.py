@@ -116,6 +116,15 @@ class Scheduler:
                 # Reserve credits
                 try:
                     await self.credit_manager.reserve(worker.account, spec.job_id, spec.cost_credits)
+                    
+                    # Update WorkerPool cache so routing works correctly!
+                    account_info = await self.credit_manager.get_account(worker.account)
+                    if account_info:
+                        await self.worker_pool.update_account_credits(
+                            worker.worker_id, 
+                            daily_free=account_info.daily_free_remaining, 
+                            balance=account_info.balance
+                        )
                 except InsufficientCreditsError as e:
                     logger.warning(f"Credit reservation failed for job {spec.job_id} on {worker.worker_id}: {e}")
                     remaining_queue.append(spec)
@@ -187,6 +196,12 @@ class Scheduler:
     ) -> None:
         """Handle notification that a task has finished successfully."""
         await self.worker_pool.mark_idle(worker_id)
+        
+        job = await self.job_registry.get_job(job_id)
+        if job and job.phase == JobPhase.CANCELLED:
+            logger.info(f"Job {job_id} finished on {worker_id} but was previously cancelled. Retaining cancelled state.")
+            return
+
         await self.job_registry.mark_completed(job_id, result=result, produced_assets=produced_assets)
         logger.info(f"Job {job_id} successfully finished on worker {worker_id}.")
 
@@ -194,6 +209,17 @@ class Scheduler:
         """Handle task failure: release reservation and trigger failover retry if allowed."""
         logger.warning(f"Job {job_id} failed on worker {worker_id}: {error}")
         await self.credit_manager.release(job_id)
+        
+        worker = await self.worker_pool.get_worker(worker_id)
+        if worker and worker.account:
+            account_info = await self.credit_manager.get_account(worker.account)
+            if account_info:
+                await self.worker_pool.update_account_credits(
+                    worker.worker_id, 
+                    daily_free=account_info.daily_free_remaining, 
+                    balance=account_info.balance
+                )
+
         await self.worker_pool.mark_failed(worker_id)
 
         job = await self.job_registry.get_job(job_id)

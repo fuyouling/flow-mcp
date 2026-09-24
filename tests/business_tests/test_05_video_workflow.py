@@ -35,8 +35,8 @@ async def test_video_create_full_params(mcp_session: ClientSession):
             "resolution": "720p",
             "duration": 8,
             "quantity": 1,
-            "assets": "test_sample.png",
-            "video_name": "SE_bird",
+            "assets": "Gray-tailed_drifting",
+            "video_name": "SE_bird_video",
             "download": "1080p",
         },
     )

@@ -85,11 +85,16 @@ def register_queue_tools(
         if job.is_finished:
             return {"status": "info", "message": f"Job '{job_id}' is already finished ({job.phase.value})."}
 
-        await credit_manager.release(job_id)
+        if job.phase in [JobPhase.PENDING, JobPhase.QUEUED, JobPhase.SCHEDULED]:
+            await credit_manager.release(job_id)
+            refund_msg = " Credits have been refunded."
+        else:
+            refund_msg = " Credits were not refunded because the task is already executing."
+
         await job_registry.update_status(
             job_id,
             phase=JobPhase.CANCELLED,
             is_finished=True,
-            message="Task was cancelled by user request.",
+            message="Task was cancelled by user request." + refund_msg,
         )
-        return {"status": "success", "message": f"Job '{job_id}' has been cancelled."}
+        return {"status": "success", "message": f"Job '{job_id}' has been cancelled." + refund_msg}
