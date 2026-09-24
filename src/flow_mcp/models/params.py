@@ -93,6 +93,10 @@ class CharacterCreateParams(BaseModel):
     character_name: str
     model_name: str = "Nano banana pro"
     full_body: bool = False
+    full_body_prompt: str = ""
+    voice_name: str = ""
+    voice_style: str = ""
+    download: bool = True
 
 
 class CharacterCreateByUploadParams(BaseModel):
@@ -100,6 +104,8 @@ class CharacterCreateByUploadParams(BaseModel):
     character_name: str
     portrait_image_path: str
     full_body_image_path: str = ""
+    voice_name: str = ""
+    voice_style: str = ""
 
 CharacterUploadParams = CharacterCreateByUploadParams
 

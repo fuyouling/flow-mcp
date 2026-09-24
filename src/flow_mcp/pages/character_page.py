@@ -191,6 +191,45 @@ class CharacterPage(BasePage):
 
         return self._wait_for_generation_complete()
 
+    def configure_voice(self, voice_name: str, voice_style: str) -> bool:
+        """Configure voice for the character."""
+        if not voice_name:
+            return True
+            
+        logger.info(f"Configuring voice: {voice_name}")
+        voice_btn = self.tab.ele('xpath://button[contains(., "选择") or contains(., "voice") or contains(@aria-label, "声音") or contains(@aria-label, "voice")]', timeout=3)
+        if not voice_btn:
+            logger.error("Could not find Voice button.")
+            return False
+            
+        voice_btn.click()
+        import time
+        time.sleep(1.5)
+        
+        search_input = self.tab.ele('css:input[placeholder*="搜"], input[placeholder*="Search"]', timeout=2)
+        if search_input:
+            search_input.input(voice_name)
+            time.sleep(1)
+            
+        # Click the voice item
+        voice_item = self.tab.ele(f'xpath://*[contains(text(), "{voice_name}")]', timeout=2)
+        if voice_item:
+            # Emulate pointer events as per docs
+            voice_item.run_js("this.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true})); this.dispatchEvent(new PointerEvent('mousedown', {bubbles: true}));")
+            time.sleep(0.1)
+            voice_item.run_js("this.dispatchEvent(new PointerEvent('pointerup', {bubbles: true})); this.dispatchEvent(new PointerEvent('mouseup', {bubbles: true}));")
+            voice_item.click()
+            time.sleep(1)
+            
+        if voice_style:
+            style_input = self.tab.ele('css:textarea[placeholder*="口音"], textarea[placeholder*="accent"]', timeout=1)
+            if style_input:
+                style_input.input(voice_style)
+                time.sleep(0.5)
+                
+        logger.info("Voice configured successfully.")
+        return True
+
     def rename_character(self, name: str) -> bool:
         """Rename character in character editor."""
         logger.info(f"Renaming character to '{name}'...")
@@ -248,6 +287,79 @@ class CharacterPage(BasePage):
             time.sleep(1)
 
         raise TimeoutError(f"Timeout ({timeout}s) waiting for portrait upload completion.")
+
+    def upload_fullbody(self, fullbody_path: str, timeout: int = 30) -> bool:
+        """
+        Upload character fullbody image file.
+        Clicks Fullbody tab/button, intercepts file chooser dialog,
+        handles agreement dialog, and waits for upload completion.
+        """
+        path_obj = Path(fullbody_path)
+        if not path_obj.is_file():
+            raise FileNotFoundError(f"Fullbody image file not found: {fullbody_path}")
+
+        abs_path = str(path_obj.resolve())
+        logger.info(f"Initiating fullbody upload for file: {abs_path}")
+
+        # Step 5: Click Fullbody button/tab
+        logger.info("Clicking Fullbody button/tab...")
+        fullbody_btn = self.tab.ele('xpath://button[contains(., "全身") or contains(., "full body")] | //span[contains(text(), "全身")]', timeout=5)
+        if fullbody_btn:
+            try:
+                fullbody_btn.click(by_js=True)
+            except Exception as e:
+                logger.warning(f"JS click on fullbody button failed: {e}, attempting regular click...")
+                fullbody_btn.click()
+            time.sleep(1.5)
+        else:
+            logger.warning("Could not find Fullbody button/tab. Continuing to look for fullbody upload button...")
+
+        # Count existing download buttons prior to fullbody upload
+        existing_dl_btns = self.tab.eles('xpath://button[@aria-label="下载图片"]')
+        initial_dl_count = len(existing_dl_btns) if existing_dl_btns else 0
+
+        # Set upload file via CDP interception
+        self.tab.set.upload_files(abs_path)
+
+        # Step 6: Locate and click Upload button in fullbody area
+        upload_btn = self.tab.ele('xpath://span[text()="上传"] | //span[contains(text(), "上传")]', timeout=5)
+        if not upload_btn:
+            upload_btn = self.tab.ele('xpath://button[contains(., "上传")]', timeout=2)
+        if not upload_btn:
+            raise Exception("Could not find fullbody Upload button (//span[contains(text(), '上传')]).")
+
+        try:
+            upload_btn.click()
+        except Exception as e:
+            logger.warning(f"Direct click on fullbody upload button failed: {e}, attempting JS click...")
+            upload_btn.click(by_js=True)
+
+        logger.info(f"Waiting up to {timeout}s for fullbody upload to complete...")
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            # Check for agreement popup
+            agree_btn = self.tab.ele('xpath://span[text()="我同意，不再显示"]', timeout=0)
+            if not agree_btn:
+                agree_btn = self.tab.ele('xpath://button[contains(., "我同意") or .//span[contains(text(), "我同意")]]', timeout=0)
+            if agree_btn:
+                logger.info("Detected agreement dialog, clicking '我同意，不再显示'...")
+                try:
+                    agree_btn.click()
+                except Exception:
+                    agree_btn.click(by_js=True)
+                time.sleep(1)
+
+            # Check if a new download button appeared, or if at least one exists
+            current_dl_btns = self.tab.eles('xpath://button[@aria-label="下载图片"]')
+            current_dl_count = len(current_dl_btns) if current_dl_btns else 0
+            if current_dl_count > initial_dl_count or (initial_dl_count == 0 and current_dl_count > 0):
+                logger.info("Fullbody upload completed successfully! Download button detected.")
+                time.sleep(1)
+                return True
+
+            time.sleep(1)
+
+        raise TimeoutError(f"Timeout ({timeout}s) waiting for fullbody upload completion.")
 
     def download_character_image(self, target_stem: str, timeout: int = 60) -> str | None:
         """Download character image and rename to target_stem."""

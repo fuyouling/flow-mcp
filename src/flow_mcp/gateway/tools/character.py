@@ -29,6 +29,10 @@ def register_character_tools(
         project_name: Annotated[str, Field(description="Google Flow 项目的名称，留空则自动选用最近访问的项目")] = "default",
         model_name: Annotated[str, Field(description="用于生成图片的模型名称")] = "Nano banana pro",
         full_body: Annotated[bool, Field(description="是否一并生成角色的全身像")] = False,
+        full_body_prompt: Annotated[str, Field(description="生成全身像的提示词。只有在 full_body 为 True 时生效。必须严格使用全英文并且遵守官方模板。")] = "",
+        voice_name: Annotated[str, Field(description="角色的声音名称，例如 'Journey'")] = "",
+        voice_style: Annotated[str, Field(description="角色的声音风格/口音描述")] = "",
+        download: Annotated[bool, Field(description="是否自动下载生成的角色头像和全身像到本地，默认为 True")] = True,
     ) -> dict[str, Any]:
         """
         在 Google Flow 中创建一个新的虚拟角色，并为其生成头像、全身像等。
@@ -44,6 +48,10 @@ def register_character_tools(
             character_name=character_name,
             model_name=model_name,
             full_body=full_body,
+            full_body_prompt=full_body_prompt,
+            voice_name=voice_name,
+            voice_style=voice_style,
+            download=download,
         )
         job_id = await image_character_service.create_character(params)
         return {
@@ -59,6 +67,8 @@ def register_character_tools(
         portrait_image_path: Annotated[str, Field(description="头像图片的本地绝对路径")],
         project_name: Annotated[str, Field(description="Google Flow 项目的名称，留空则自动选用最近访问的项目")] = "default",
         full_body_image_path: Annotated[str, Field(description="全身像图片的本地绝对路径（可选），若提供则上传全身像")] = "",
+        voice_name: Annotated[str, Field(description="角色的声音名称，例如 'Journey'")] = "",
+        voice_style: Annotated[str, Field(description="角色的声音风格/口音描述")] = "",
     ) -> dict[str, Any]:
         """
         通过上传本地已有图片在 Google Flow 中创建一个新的虚拟角色（头像必传，全身像选传）。
@@ -72,6 +82,8 @@ def register_character_tools(
             character_name=character_name,
             portrait_image_path=portrait_image_path,
             full_body_image_path=full_body_image_path,
+            voice_name=voice_name,
+            voice_style=voice_style,
         )
         job_id = await image_character_service.create_character_by_upload(params)
         return {

@@ -216,13 +216,38 @@ class ImageCharacterService:
                     source_job_id=job.job_id,
                 )
 
+            fullbody_path = res.get("fullbody_path")
+            if fullbody_path and Path(fullbody_path).is_file():
+                await self.asset_hub.store_asset(
+                    source_path=Path(fullbody_path),
+                    name=f"{char_name}_Fullbody",
+                    kind=AssetKind.CHARACTER,
+                    created_by_worker="master",
+                    source_job_id=job.job_id,
+                )
+
             await self.job_registry.update_status(job.job_id, phase=JobPhase.BROADCASTING)
-            broadcast_results = await self._broadcast_asset(
-                asset_name=f"{char_name}_Portrait",
-                kind=AssetKind.CHARACTER,
-                project_alias=job.spec.project_alias,
-                parent_job=job,
-            )
+            broadcast_results = {}
+            if portrait_path and Path(portrait_path).is_file():
+                broadcast_results = await self._broadcast_asset(
+                    asset_name=f"{char_name}_Portrait",
+                    kind=AssetKind.CHARACTER,
+                    project_alias=job.spec.project_alias,
+                    parent_job=job,
+                )
+            
+            if fullbody_path and Path(fullbody_path).is_file():
+                fb_broadcast = await self._broadcast_asset(
+                    asset_name=f"{char_name}_Fullbody",
+                    kind=AssetKind.CHARACTER,
+                    project_alias=job.spec.project_alias,
+                    parent_job=job,
+                )
+                for wid, status in fb_broadcast.items():
+                    if status == "failed":
+                        broadcast_results[wid] = "failed"
+                    elif wid not in broadcast_results:
+                        broadcast_results[wid] = status
 
             await self.job_registry.update_status(
                 job.job_id,
@@ -242,21 +267,46 @@ class ImageCharacterService:
             res = await self.local_executor.create_character_by_upload(job.spec.project_alias, params)
 
             char_name = params.character_name
-            await self.asset_hub.store_asset(
-                source_path=Path(params.portrait_image_path),
-                name=f"{char_name}_Portrait",
-                kind=AssetKind.CHARACTER,
-                created_by_worker="master",
-                source_job_id=job.job_id,
-            )
+            if params.portrait_image_path and Path(params.portrait_image_path).is_file():
+                await self.asset_hub.store_asset(
+                    source_path=Path(params.portrait_image_path),
+                    name=f"{char_name}_Portrait",
+                    kind=AssetKind.CHARACTER,
+                    created_by_worker="master",
+                    source_job_id=job.job_id,
+                )
+
+            if params.full_body_image_path and Path(params.full_body_image_path).is_file():
+                await self.asset_hub.store_asset(
+                    source_path=Path(params.full_body_image_path),
+                    name=f"{char_name}_Fullbody",
+                    kind=AssetKind.CHARACTER,
+                    created_by_worker="master",
+                    source_job_id=job.job_id,
+                )
 
             await self.job_registry.update_status(job.job_id, phase=JobPhase.BROADCASTING)
-            broadcast_results = await self._broadcast_asset(
-                asset_name=f"{char_name}_Portrait",
-                kind=AssetKind.CHARACTER,
-                project_alias=job.spec.project_alias,
-                parent_job=job,
-            )
+            broadcast_results = {}
+            if params.portrait_image_path and Path(params.portrait_image_path).is_file():
+                broadcast_results = await self._broadcast_asset(
+                    asset_name=f"{char_name}_Portrait",
+                    kind=AssetKind.CHARACTER,
+                    project_alias=job.spec.project_alias,
+                    parent_job=job,
+                )
+            
+            if params.full_body_image_path and Path(params.full_body_image_path).is_file():
+                fb_broadcast = await self._broadcast_asset(
+                    asset_name=f"{char_name}_Fullbody",
+                    kind=AssetKind.CHARACTER,
+                    project_alias=job.spec.project_alias,
+                    parent_job=job,
+                )
+                for wid, status in fb_broadcast.items():
+                    if status == "failed":
+                        broadcast_results[wid] = "failed"
+                    elif wid not in broadcast_results:
+                        broadcast_results[wid] = status
 
             await self.job_registry.update_status(
                 job.job_id,

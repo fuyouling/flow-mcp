@@ -138,17 +138,25 @@ class LocalExecutor:
 
             portrait_b64 = char_page.generate_portrait(params.prompt, params.model_name)
             char_page.rename_character(params.character_name)
-            portrait_path = char_page.download_character_image(f"{params.character_name}_Portrait")
+            
+            portrait_path = ""
+            if params.download:
+                portrait_path = char_page.download_character_image(f"{params.character_name}_Portrait") or ""
+
+            if params.voice_name:
+                char_page.configure_voice(params.voice_name, params.voice_style)
 
             fullbody_path = ""
             if params.full_body:
-                char_page.generate_fullbody(params.prompt, params.model_name)
-                fullbody_path = char_page.download_character_image(f"{params.character_name}_Fullbody") or ""
+                char_page.generate_fullbody(params.full_body_prompt or params.prompt)
+                if params.download:
+                    fullbody_path = char_page.download_character_image(f"{params.character_name}_Fullbody") or ""
 
             char_page.save_character()
+            
             return {
                 "character_name": params.character_name,
-                "portrait_path": portrait_path or "",
+                "portrait_path": portrait_path,
                 "fullbody_path": fullbody_path,
                 "portrait_b64": portrait_b64,
             }
@@ -171,19 +179,20 @@ class LocalExecutor:
             char_page.navigate_to_characters(project_url)
             char_page.click_new_character()
             char_page.upload_portrait(params.portrait_image_path)
-            char_page.rename_character(params.character_name)
-            portrait_path = char_page.download_character_image(f"{params.character_name}_Portrait")
 
-            fullbody_path = ""
             if params.full_body_image_path:
-                char_page.upload_portrait(params.full_body_image_path)
-                fullbody_path = char_page.download_character_image(f"{params.character_name}_Fullbody") or ""
+                char_page.upload_fullbody(params.full_body_image_path)
 
+            if params.voice_name:
+                char_page.configure_voice(params.voice_name, params.voice_style)
+
+            char_page.rename_character(params.character_name)
             char_page.save_character()
+            
             return {
                 "character_name": params.character_name,
-                "portrait_path": portrait_path or "",
-                "fullbody_path": fullbody_path,
+                "portrait_path": str(Path(params.portrait_image_path).resolve()),
+                "fullbody_path": str(Path(params.full_body_image_path).resolve()) if params.full_body_image_path else "",
             }
 
         return await asyncio.to_thread(run_sync)
