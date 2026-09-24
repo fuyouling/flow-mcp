@@ -1,10 +1,10 @@
 """Integration test for Master gRPC task streaming and HTTP asset hub endpoints."""
 import asyncio
-import pytest
 import tempfile
 from pathlib import Path
+
 import httpx
-import grpc
+import pytest
 from grpc import aio as grpc_aio
 
 from flow_mcp.control.asset_hub import AssetHub
@@ -102,9 +102,9 @@ async def test_grpc_registration_and_http_status(cluster_env):
 
         call = stub.StreamTasks(msg_gen())
         ack = await call.read()
-        assert ack.WhichOneof("payload") == "ack"
-        assert ack.ack.worker_id == "test_worker_node_1"
-        assert ack.ack.success is True
+        assert ack.WhichOneof("payload") == "ack" # type: ignore
+        assert ack.ack.worker_id == "test_worker_node_1" # type: ignore
+        assert ack.ack.success is True # type: ignore
 
         # Check worker in worker_pool
         w = await worker_pool.get_worker("test_worker_node_1")
@@ -120,6 +120,8 @@ async def test_grpc_registration_and_http_status(cluster_env):
             assert data["workers_count"] >= 1
             w_ids = [item["worker_id"] for item in data["workers"]]
             assert "test_worker_node_1" in w_ids
+            acct_emails = [item["email"] for item in data.get("accounts", [])]
+            assert "node1@gmail.com" in acct_emails
 
         call.cancel()
 

@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 from typing import Any
+
 from mcp.server.fastmcp import FastMCP
-from loguru import logger
 
 from flow_mcp.browser.session import get_browser
 from flow_mcp.config import get_settings
@@ -20,6 +20,7 @@ def register_project_tools(mcp: FastMCP, project_dao: ProjectDAO) -> None:
         target = url or get_settings().google_flow_base_url
         browser = get_browser()
         tab = browser.latest_tab
+        assert not isinstance(tab, str)
         tab.get(target)
         home = HomePage(tab)
         home.dismiss_modals()
@@ -29,7 +30,9 @@ def register_project_tools(mcp: FastMCP, project_dao: ProjectDAO) -> None:
     async def project_list() -> dict[str, Any]:
         """List all projects discovered on Flow and in local database."""
         browser = get_browser()
-        home = HomePage(browser.latest_tab)
+        tab = browser.latest_tab
+        assert not isinstance(tab, str)
+        home = HomePage(tab)
         home.open()
         projects = home.get_projects()
 
@@ -48,6 +51,7 @@ def register_project_tools(mcp: FastMCP, project_dao: ProjectDAO) -> None:
         """Open a project in the browser, creating it if it does not exist."""
         browser = get_browser()
         tab = browser.latest_tab
+        assert not isinstance(tab, str)
         home = HomePage(tab)
         home.open()
 
@@ -79,7 +83,9 @@ def register_project_tools(mcp: FastMCP, project_dao: ProjectDAO) -> None:
     async def project_rename(old_name: str, new_name: str) -> dict[str, Any]:
         """Rename an existing project."""
         browser = get_browser()
-        home = HomePage(browser.latest_tab)
+        tab = browser.latest_tab
+        assert not isinstance(tab, str)
+        home = HomePage(tab)
         home.open()
         success = home.rename_project(new_title=new_name, old_title=old_name)
         if success:

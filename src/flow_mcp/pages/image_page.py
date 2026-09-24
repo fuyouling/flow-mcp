@@ -5,6 +5,7 @@ import re
 import time
 from pathlib import Path
 from typing import Any, Callable, Optional
+
 from loguru import logger
 
 from flow_mcp.pages.base_page import BasePage
@@ -23,86 +24,107 @@ class ImagePage(BasePage):
         quantity: str = "x1",
     ) -> None:
         """Configure generation settings panel."""
-        time.sleep(1)
+        time.sleep(2)
 
-        # Open settings panel
-        settings_btn = self.tab.ele("tag:button@@aria-label=设置", timeout=2)
+        # 1. Open settings panel
+        settings_btn = self.tab.ele("tag:button@@aria-label=设置触发器", timeout=2)
         if not settings_btn:
-            candidates = self.tab.eles("tag:button@@text():设置")
-            if candidates:
-                settings_btn = candidates[-1]
+            s_candidates = self.tab.eles("tag:button@@text():🍌")
+            if s_candidates:
+                settings_btn = s_candidates[-1]
 
         if settings_btn:
             settings_btn.click()
-            time.sleep(0.8)
+            time.sleep(1)
 
-        # Switch to image tab
+        # 2. Switch to image tab
         img_tab = self.tab.ele('xpath://span[text()="图片" and @class="toggle-text"]', timeout=2)
         if not img_tab:
-            img_tab = self.tab.ele("tag:button@@text()=图片", timeout=1)
+            s_btn = self.tab.eles("tag:button@@text():🍌")
+            if s_btn:
+                s_btn[-1].click()
+                time.sleep(1)
+                img_tab = self.tab.ele("tag:button@@text()=图片", timeout=2)
 
         if img_tab:
             img_tab.click()
             time.sleep(0.5)
 
-        # Aspect ratio
+        # 3. Aspect ratio
         ratio_btn = self.tab.ele(f"tag:button@@text():{aspect_ratio}", timeout=1)
         if ratio_btn:
             ratio_btn.click()
-            time.sleep(0.3)
+            time.sleep(0.5)
 
-        # Model name dropdown
+        # 4. Model dropdown
         dropdown = self.tab.ele("tag:button@@text():arrow_drop_down", timeout=1)
         if dropdown:
             dropdown.click()
             time.sleep(0.5)
-            options = self.tab.eles(f"tag:button@@text():{model_name}")
-            for opt in options:
-                if "arrow_drop_down" not in opt.text:
+            pro_options = self.tab.eles(f"tag:button@@text():{model_name}")
+            for opt in pro_options:
+                if "arrow_drop_down" not in (opt.text or ""):
                     opt.click()
-                    time.sleep(0.3)
+                    time.sleep(0.5)
                     break
 
-        # Quantity
+        # 5. Quantity
         qty_btn = self.tab.ele(f"tag:button@@text()={quantity}", timeout=1)
         if qty_btn:
             qty_btn.click()
-            time.sleep(0.3)
+            time.sleep(0.5)
 
-        # Close settings panel via ESC
+        # 6. Close settings panel via ESC
         self.tab.run_cdp("Input.dispatchKeyEvent", type="rawKeyDown", windowsVirtualKeyCode=27)
         self.tab.run_cdp("Input.dispatchKeyEvent", type="keyUp", windowsVirtualKeyCode=27)
-        time.sleep(0.5)
+        time.sleep(0.8)
+        if self.tab.ele(".cdk-overlay-backdrop", timeout=0.5):
+            self.tab.run_cdp("Input.dispatchKeyEvent", type="rawKeyDown", windowsVirtualKeyCode=27)
+            self.tab.run_cdp("Input.dispatchKeyEvent", type="keyUp", windowsVirtualKeyCode=27)
+            time.sleep(0.5)
 
     def add_assets_to_prompt(self, assets: list[str]) -> None:
         """Search and link existing project assets to the generation prompt."""
         for asset in assets:
             if not asset.strip():
                 continue
-            add_btn = self.tab.ele("@@aria-label=显示素材", timeout=2)
-            if not add_btn:
-                add_btn = self.tab.ele('xpath://button[contains(@aria-label, "素材") or contains(., "素材")]', timeout=1)
-            if not add_btn:
+            add_btn = self.tab.ele('xpath://button[@aria-label="在提示框中添加素材"]', timeout=2) or self.tab.ele(
+                "@@aria-label=在提示框中添加素材", timeout=2
+            )
+            if add_btn:
+                add_btn.click()
+                logger.info("Clicked '在提示框中添加素材' button")
+                time.sleep(1)
+            else:
+                logger.warning(f"'添加素材' button not found, skipping asset: {asset}")
                 continue
 
-            add_btn.click()
-            time.sleep(0.8)
-
-            search_input = self.tab.ele('xpath://input[@class="search-input" and @placeholder="搜索"]', timeout=2)
+            search_input = self.tab.ele('xpath://input[@class="search-input" and @placeholder="搜索资源"]', timeout=2)
             if search_input:
                 search_input.clear()
                 search_input.input(asset.strip())
-                time.sleep(1.2)
+                logger.info(f"Searching for asset: {asset.strip()!r}")
+                time.sleep(1.5)
                 add_prompt_btn = self.tab.ele("tag:button@@text():添加到提示", timeout=2)
                 if add_prompt_btn:
                     add_prompt_btn.click()
-                    time.sleep(0.8)
+                    logger.info(f"Clicked '添加到提示' for asset: {asset.strip()!r}")
+                    time.sleep(1)
                 else:
+                    logger.warning(f"Asset result or add button not found for: {asset.strip()!r}")
                     self.tab.run_cdp("Input.dispatchKeyEvent", type="keyDown", windowsVirtualKeyCode=27)
-                    time.sleep(0.3)
+                    time.sleep(0.5)
+            else:
+                logger.warning(f"Search input not found for asset: {asset.strip()!r}")
 
     def enter_prompt(self, prompt: str) -> None:
         """Safely type prompt text into ProseMirror rich text editor."""
+        prompt_entered = False
+        if self.tab.ele(".cdk-overlay-backdrop", timeout=0.5):
+            self.tab.run_cdp("Input.dispatchKeyEvent", type="rawKeyDown", windowsVirtualKeyCode=27)
+            self.tab.run_cdp("Input.dispatchKeyEvent", type="keyUp", windowsVirtualKeyCode=27)
+            time.sleep(0.5)
+
         editor = self.tab.ele(
             'xpath://flow-rich-text-editor[@class="prompt-input"]//div[@contenteditable="true"]',
             timeout=3,
@@ -110,29 +132,60 @@ class ImagePage(BasePage):
         if not editor:
             editor = self.tab.ele('xpath://flow-rich-text-editor[@class="prompt-input"]', timeout=2)
 
-        if not editor:
-            raise RuntimeError("Prompt input editor element not found on page.")
+        if editor:
+            editor.click()
+            time.sleep(0.3)
 
-        editor.click()
-        time.sleep(0.3)
+            # Strategy 1: CDP Input.insertText
+            try:
+                self.tab.run_cdp("Input.insertText", text=prompt)
+                time.sleep(0.5)
+                pm_text = self.tab.run_js(
+                    "return (document.querySelector('flow-rich-text-editor.prompt-input div[contenteditable=\"true\"]') || {}).innerText || '';"
+                )
+                if prompt.strip() in (pm_text or "").strip():
+                    prompt_entered = True
+                    logger.info("Prompt entered via CDP Input.insertText and verified")
+                else:
+                    logger.warning(f"CDP Input.insertText executed but text not verified (got {pm_text!r}), trying JS clipboard fallback")
+            except Exception as e:
+                logger.warning(f"CDP Input.insertText failed: {e!r}, trying JS clipboard fallback")
 
-        # Strategy 1: CDP insertText
-        try:
-            self.tab.run_cdp("Input.insertText", text=prompt)
-            time.sleep(0.5)
-            val = self.tab.run_js(
-                "return (document.querySelector('flow-rich-text-editor.prompt-input div[contenteditable=\"true\"]') || {}).innerText || '';"
-            )
-            if prompt.strip() in val.strip():
-                return
-        except Exception:
-            pass
+            # Strategy 2: JS set clipboard + CDP Ctrl+V (fallback)
+            if not prompt_entered:
+                try:
+                    self.tab.run_js("""
+                        (function(text) {
+                            navigator.clipboard.writeText(text).catch(function() {
+                                var ta = document.createElement('textarea');
+                                ta.value = text;
+                                ta.style.position = 'fixed';
+                                ta.style.opacity = '0';
+                                document.body.appendChild(ta);
+                                ta.focus();
+                                ta.select();
+                                document.execCommand('copy');
+                                document.body.removeChild(ta);
+                            });
+                        })(arguments[0]);
+                    """, prompt)
+                    time.sleep(0.3)
+                    editor.click()
+                    time.sleep(0.2)
+                    self.tab.run_cdp("Input.dispatchKeyEvent", type="keyDown", windowsVirtualKeyCode=86, modifiers=2)
+                    self.tab.run_cdp("Input.dispatchKeyEvent", type="keyUp", windowsVirtualKeyCode=86, modifiers=2)
+                    time.sleep(0.5)
+                    pm_text = self.tab.run_js(
+                        "return (document.querySelector('flow-rich-text-editor.prompt-input div[contenteditable=\"true\"]') || {}).innerText || '';"
+                    )
+                    if prompt.strip() in (pm_text or "").strip():
+                        prompt_entered = True
+                        logger.info("Prompt entered via JS clipboard + CDP Ctrl+V and verified")
+                except Exception as e:
+                    logger.warning(f"Clipboard paste fallback failed: {e!r}")
 
-        # Strategy 2: Direct editor.input
-        try:
-            editor.input(prompt)
-        except Exception as e:
-            raise RuntimeError(f"Failed to enter prompt into editor: {e}") from e
+        if not prompt_entered:
+            logger.warning("Could not verify prompt text entered into editor.")
 
     def generate_image(
         self,
@@ -191,7 +244,10 @@ class ImagePage(BasePage):
             m = re.search(r"(\d{1,3})", text)
             pct = int(m.group(1)) if m else 0
             if progress_callback:
-                progress_callback(pct, text or f"{pct}%")
+                try:
+                    progress_callback(pct, text or f"{pct}%")
+                except Exception as ex:
+                    logger.debug(f"Progress callback exception: {ex}")
             time.sleep(2)
 
         time.sleep(1)
@@ -298,9 +354,9 @@ class ImagePage(BasePage):
         start_time = time.time()
         uploaded_tile = None
         while time.time() - start_time < timeout:
-            agree_btn = self.tab.ele('xpath://span[text()="我同意，不再提示"]', timeout=0)
+            agree_btn = self.tab.ele('xpath://span[text()="我同意，不再显示"]', timeout=0)
             if not agree_btn:
-                agree_btn = self.tab.ele('xpath://button[contains(., "同意")]', timeout=0)
+                agree_btn = self.tab.ele('xpath://button[contains(., "我同意") or .//span[contains(text(), "我同意")]]', timeout=0)
             if agree_btn:
                 try:
                     agree_btn.click()

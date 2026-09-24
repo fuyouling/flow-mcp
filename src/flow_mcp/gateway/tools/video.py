@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 from typing import Any
+
 from mcp.server.fastmcp import FastMCP
-from loguru import logger
 
 from flow_mcp.browser.session import get_browser
 from flow_mcp.control.job_registry import JobRegistry
 from flow_mcp.db.project_dao import ProjectDAO
-from flow_mcp.models.params import VideoCreateParams, VideoCreateByUploadParams
+from flow_mcp.models.params import VideoCreateByUploadParams, VideoCreateParams
 from flow_mcp.pages.video_page import VideoPage
 from flow_mcp.services.video_service import VideoService
 
@@ -26,7 +26,12 @@ def register_video_tools(
         prompt: str,
         project_name: str = "default",
         model_name: str = "Omni 1.1 Flash",
+        mode: str = "asset",
+        start_frame: str = "",
+        end_frame: str = "",
+        aspect_ratio: str = "16:9",
         resolution: str = "720p",
+        duration: int = 8,
         quantity: int = 1,
         assets: str = "",
         video_name: str = "",
@@ -37,7 +42,12 @@ def register_video_tools(
             project_name=project_name,
             prompt=prompt,
             model_name=model_name,
+            mode=mode,
+            start_frame=start_frame,
+            end_frame=end_frame,
+            aspect_ratio=aspect_ratio,
             resolution=resolution,
+            duration=duration,
             quantity=quantity,
             assets=assets,
             video_name=video_name,
@@ -88,7 +98,9 @@ def register_video_tools(
             url = f"{get_settings().google_flow_base_url}/project/{local_uuid}"
 
         browser = get_browser()
-        vid_page = VideoPage(browser.latest_tab)
+        tab = browser.latest_tab
+        assert not isinstance(tab, str)
+        vid_page = VideoPage(tab)
         videos = vid_page.list_videos(project_url=url)
         return {
             "status": "success",

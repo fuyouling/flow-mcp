@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 from typing import Any
+
 from mcp.server.fastmcp import FastMCP
-from loguru import logger
 
 from flow_mcp.browser.session import get_browser
 from flow_mcp.control.job_registry import JobRegistry
 from flow_mcp.db.project_dao import ProjectDAO
-from flow_mcp.models.params import ImageCreateParams, ImageCreateByUploadParams
+from flow_mcp.models.params import ImageCreateByUploadParams, ImageCreateParams
 from flow_mcp.pages.image_page import ImagePage
 from flow_mcp.services.image_character_service import ImageCharacterService
 
@@ -88,7 +88,9 @@ def register_image_tools(
             url = f"{get_settings().google_flow_base_url}/project/{local_uuid}"
 
         browser = get_browser()
-        img_page = ImagePage(browser.latest_tab)
+        tab = browser.latest_tab
+        assert not isinstance(tab, str)
+        img_page = ImagePage(tab)
         images = img_page.list_images(project_url=url)
         return {
             "status": "success",

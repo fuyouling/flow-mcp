@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any, Union
+
 from DrissionPage import ChromiumPage
 from DrissionPage.items import ChromiumTab, MixTab
 from loguru import logger
@@ -13,7 +14,7 @@ class BasePage:
     """Base page object encapsulating common browser actions and robust element handling."""
 
     def __init__(self, tab: Union[ChromiumTab, MixTab, ChromiumPage]):
-        self.tab = tab
+        self.tab: Any = tab
 
     def navigate(self, url: str) -> None:
         """Navigate to a specified URL."""

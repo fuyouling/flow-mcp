@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import aiosqlite
-from loguru import logger
 
 from flow_mcp.db.connection import get_db_connection
 from flow_mcp.models.asset import AssetKind, AssetRecord

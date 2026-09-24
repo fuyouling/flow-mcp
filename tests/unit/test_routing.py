@@ -1,8 +1,8 @@
 """Unit tests for WorkerPool routing algorithm."""
 import pytest
+
 from flow_mcp.control.worker_pool import WorkerPool
 from flow_mcp.models.job import JobSpec, TaskType
-from flow_mcp.models.worker import WorkerPhase
 
 
 @pytest.mark.asyncio

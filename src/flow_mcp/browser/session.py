@@ -1,15 +1,15 @@
 """Browser session singleton managing Chromium lifecycle."""
 from __future__ import annotations
 
-import sys
 import os
 import time
 from pathlib import Path
+
 from DrissionPage import Chromium, ChromiumOptions
 from loguru import logger
 
 from flow_mcp.browser.launcher import get_browser_port, load_browser_flags
-from flow_mcp.browser.utils import is_port_in_use, stop_browser
+from flow_mcp.browser.utils import stop_browser
 from flow_mcp.config import get_settings
 from flow_mcp.utils.errors import BrowserOperationError
 

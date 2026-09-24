@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 import time
 from typing import Any, Optional
+
 from loguru import logger
 
 from flow_mcp.pages.base_page import BasePage
@@ -63,6 +64,8 @@ class HomePage(BasePage):
                 title = full_text.strip()
 
             if local_uuid and title:
+                if title in result:
+                    raise ValueError(f"检测到同名项目冲突: 存在多个名为 '{title}' 的项目。请进入 Google Flow 网页端手动将它们重命名以区分。")
                 result[title] = {"name": title, "url": href, "local_uuid": local_uuid}
 
         logger.info(f"Discovered {len(result)} projects on home page.")
@@ -173,8 +176,8 @@ class HomePage(BasePage):
             if panel_opened:
                 try:
                     close_btn = self.tab.ele(
-                        'xpath://button[@aria-label="关闭账号详情" or @aria-label="Close account panel"]',
-                        timeout=2,
+                        'xpath://button[@aria-label="关闭账号面板" or @aria-label="Close account panel"]',
+                        timeout=3,
                     )
                     if close_btn:
                         close_btn.click()
@@ -206,8 +209,8 @@ class HomePage(BasePage):
             if panel_opened:
                 try:
                     close_btn = self.tab.ele(
-                        'xpath://button[@aria-label="关闭账号详情" or @aria-label="Close account panel"]',
-                        timeout=2,
+                        'xpath://button[@aria-label="关闭账号面板" or @aria-label="Close account panel"]',
+                        timeout=3,
                     )
                     if close_btn:
                         close_btn.click()

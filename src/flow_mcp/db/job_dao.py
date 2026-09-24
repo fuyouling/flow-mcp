@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+
 import aiosqlite
-from loguru import logger
 
 from flow_mcp.db.connection import get_db_connection
 from flow_mcp.models.job import Job, JobPhase, JobSpec, JobStatus, TaskType

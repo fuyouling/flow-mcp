@@ -4,7 +4,8 @@ from __future__ import annotations
 import shutil
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
+
 from loguru import logger
 
 from flow_mcp.config import get_settings
@@ -37,15 +38,21 @@ class CharacterPage(BasePage):
         """Click 'New Character' button."""
         logger.info("Clicking 'New Character' button...")
         new_btn = self.tab.ele(
-            'xpath://button[contains(., "创建角色") or contains(., "新建角色") or contains(., "角色") or contains(., "New Character")]',
+            'xpath://button[contains(., "新角色") or contains(., "新建角色") or contains(., "创建角色") or contains(., "New Character")]',
             timeout=3,
         )
         if new_btn:
             new_btn.click()
-            time.sleep(2)
-            return True
-        logger.warning("New Character button not found.")
-        return False
+            time.sleep(2.5)
+            logger.info("Clicked New Character.")
+        else:
+            logger.warning("New Character button not found. Checking if editor is ready.")
+
+        # Verify editor is ready
+        if not self.tab.ele("css:.ProseMirror", timeout=3) and not self.tab.ele("css:textarea", timeout=1):
+            logger.error("Editor not found after clicking New Character.")
+            return False
+        return True
 
     def _safe_input_prompt(self, editor: Any, prompt: str) -> None:
         """Input prompt text into character editor without triggering popup triggers."""
@@ -75,9 +82,13 @@ class CharacterPage(BasePage):
         start_time = time.time()
         while time.time() - start_time < max_wait:
             err = self.tab.ele("css:.error-message", timeout=0)
-            if err and ("失败" in err.text or "failed" in err.text.lower()):
-                retry = self.tab.ele('xpath://button[contains(., "重试") or contains(., "Retry")]', timeout=0)
+            if err and ("失败" in err.text or "failed" in err.text.lower() or "error" in err.text.lower()):  # type: ignore[operator]
+                retry = self.tab.ele(
+                    'xpath://button[contains(., "重试") or contains(., "Retry") or contains(., "重新生成")]',
+                    timeout=0,
+                )
                 if retry:
+                    logger.warning("Generation failed, clicking retry...")
                     retry.click()
                     time.sleep(2)
                     continue
@@ -92,7 +103,7 @@ class CharacterPage(BasePage):
                 try:
                     b64 = new_img.get_screenshot(as_base64="png")
                     if b64:
-                        return b64
+                        return b64  # type: ignore[return-value]
                 except Exception:
                     pass
                 return new_img.attr("src") or ""
@@ -104,44 +115,99 @@ class CharacterPage(BasePage):
     def generate_portrait(self, prompt: str, model_name: str = "Nano banana pro") -> str:
         """Generate character portrait."""
         logger.info(f"Generating character portrait (model={model_name})...")
-        editor = self.tab.ele("css:.ProseMirror", timeout=3) or self.tab.ele("css:textarea")
+        editor = self.tab.ele("css:.ProseMirror", timeout=3)
+        if not editor:
+            editor = self.tab.ele("css:textarea")
+
         if editor:
             editor.click()
             editor.clear()
             self._safe_input_prompt(editor, prompt)
             time.sleep(1)
 
-        gen_btn = self.tab.ele('xpath://button[@type="submit"]', timeout=3)
+        if model_name:
+            logger.info(f"Selecting model: {model_name}")
+            model_btn = self.tab.ele('css:button.model-select-button, button[aria-label*="模型"], button[aria-label*="model"]', timeout=2)
+            if model_btn:
+                model_btn.click()
+                time.sleep(1)
+                lower_model = model_name.lower()
+                menu_items = self.tab.eles("css:.mat-mdc-menu-item, .mat-menu-item", timeout=2)
+                for item in menu_items:
+                    if lower_model in (item.text or "").lower():
+                        item.click()
+                        time.sleep(1)
+                        break
+
+        gen_btn = self.tab.ele('xpath://button[@type="submit"]', timeout=5)
+        if not gen_btn:
+            gen_btn = self.tab.ele('xpath://button[contains(., "生成") or contains(., "Generate")]', timeout=5)
+
         if gen_btn:
+            if gen_btn.attr("disabled"):
+                logger.warning("Generate button is disabled, attempting to click anyway...")
             gen_btn.click()
             time.sleep(2)
+        else:
+            raise RuntimeError("Generate button not found.")
 
         return self._wait_for_generation_complete()
 
-    def generate_fullbody(self, prompt: str, model_name: str = "Nano banana pro") -> str:
+    def generate_fullbody(self, prompt: str = "", model_name: str = "Nano banana pro") -> str:
         """Generate full body character image."""
-        logger.info("Generating character full body...")
+        logger.info("Generating fullbody image...")
         fullbody_btn = self.tab.ele(
-            'xpath://button[contains(., "生成全身") or contains(., "full body") or contains(., "全身")]',
+            'xpath://button[contains(., "生成全身") or contains(., "全身") or contains(., "Full body")]',
             timeout=3,
         )
-        if fullbody_btn:
-            fullbody_btn.click(by_js=True)
-            time.sleep(2)
+        if not fullbody_btn:
+            logger.warning("Generate Fullbody button not found.")
+            return ""
 
-        editor = self.tab.ele("css:.ProseMirror", timeout=3) or self.tab.ele("css:textarea")
-        if editor:
-            editor.click()
-            editor.clear()
-            self._safe_input_prompt(editor, prompt)
-            time.sleep(1)
+        fullbody_btn.click()
+        time.sleep(2)
 
-        gen_btn = self.tab.ele('xpath://button[@type="submit"]', timeout=3)
+        if prompt:
+            editor = self.tab.ele("css:.ProseMirror", timeout=2)
+            if not editor:
+                editor = self.tab.ele("css:textarea")
+            if editor:
+                editor.click()
+                editor.clear()
+                self._safe_input_prompt(editor, prompt)
+                time.sleep(1)
+
+        gen_btn = self.tab.ele('xpath://button[@type="submit"]', timeout=5)
+        if not gen_btn:
+            gen_btn = self.tab.ele('xpath://button[contains(., "生成") or contains(., "Generate")]', timeout=5)
+
         if gen_btn:
+            if gen_btn.attr("disabled"):
+                logger.warning("Generate button is disabled, attempting to click anyway...")
             gen_btn.click()
             time.sleep(2)
+        else:
+            logger.warning("Generate button not found for fullbody.")
 
         return self._wait_for_generation_complete()
+
+    def rename_character(self, name: str) -> bool:
+        """Rename character in character editor."""
+        logger.info(f"Renaming character to '{name}'...")
+        name_input = self.tab.ele(
+            'xpath://input[@placeholder="角色名称" or @aria-label="角色名称" or contains(@placeholder, "角色")]',
+            timeout=3,
+        )
+        if not name_input:
+            logger.warning("Character name input not found.")
+            return False
+
+        name_input.click()
+        time.sleep(0.3)
+        name_input.clear()
+        name_input.input(name)
+        time.sleep(0.5)
+        return True
 
     def upload_portrait(self, portrait_path: str, timeout: int = 30) -> bool:
         """Upload portrait image file using CDP interception."""
@@ -165,9 +231,9 @@ class CharacterPage(BasePage):
 
         start_time = time.time()
         while time.time() - start_time < timeout:
-            agree_btn = self.tab.ele('xpath://span[text()="我同意，不再提示"]', timeout=0)
+            agree_btn = self.tab.ele('xpath://span[text()="我同意，不再显示"]', timeout=0)
             if not agree_btn:
-                agree_btn = self.tab.ele('xpath://button[contains(., "同意")]', timeout=0)
+                agree_btn = self.tab.ele('xpath://button[contains(., "我同意") or .//span[contains(text(), "我同意")]]', timeout=0)
             if agree_btn:
                 try:
                     agree_btn.click()
@@ -194,13 +260,18 @@ class CharacterPage(BasePage):
 
         download_btn = self.tab.ele('xpath://button[@aria-label="下载图片"]', timeout=5)
         if not download_btn:
-            logger.warning("Download character image button not found.")
+            logger.warning("Download character image button (//button[@aria-label='下载图片']) not found.")
             return None
 
         try:
             download_btn.click()
+            time.sleep(1)
         except Exception:
-            download_btn.click(by_js=True)
+            try:
+                download_btn.click(by_js=True)
+                time.sleep(1)
+            except Exception:
+                return None
 
         downloaded_file = None
         while time.time() - start_time < timeout:
@@ -212,7 +283,12 @@ class CharacterPage(BasePage):
                     fname = file.name
                     if fname.endswith(".crdownload") or fname.endswith(".tmp"):
                         continue
+                    if not fname.startswith("图片"):
+                        continue
                     if file not in existing_files and file.stat().st_size > 0:
+                        downloaded_file = file
+                        break
+                    elif file.stat().st_mtime >= start_time - 1 and file.stat().st_size > 0:
                         downloaded_file = file
                         break
             except Exception:
@@ -232,39 +308,46 @@ class CharacterPage(BasePage):
             downloaded_file.rename(target_file)
             return str(target_file.resolve())
         except Exception:
+            if target_file.exists():
+                target_file.unlink()
             shutil.move(str(downloaded_file), str(target_file))
             return str(target_file.resolve())
 
     def save_character(self) -> bool:
         """Click Done/Save button for character."""
-        done_btn = self.tab.ele('xpath://button[contains(., "完成") or contains(., "Done")]', timeout=3)
+        done_btn = self.tab.ele('xpath://button[contains(., "完成") or contains(., "Done") or contains(., "保存")]', timeout=3)
         if done_btn:
             done_btn.click()
             time.sleep(2)
+            logger.info("Character saved successfully.")
             return True
         return False
 
     def list_characters(self, project_url: str = "") -> list[dict[str, Any]]:
-        """List characters in project."""
+        """List all characters in the project."""
         if project_url and project_url not in (self.tab.url or ""):
             self.tab.get(project_url)
             time.sleep(3)
 
         char_btn = self.tab.ele('xpath://mat-list-item//span[text()="角色"]', timeout=3)
         if not char_btn:
-            char_btn = self.tab.ele('xpath://mat-list-item[.//span[contains(text(), "角色") or text()="Characters"]]', timeout=1)
+            char_btn = self.tab.ele('xpath://mat-list-item[.//span[contains(text(), "角色") or contains(text(), "Character")]]', timeout=1)
         if char_btn:
             char_btn.click()
             time.sleep(2)
 
-        tiles = self.tab.eles("xpath://flow-character-tile")
+        self.tab.ele('xpath://div[contains(@class, "character-tile-container")]', timeout=3)
+        tiles = self.tab.eles('xpath://div[@class="character-tile-container"]')
         if not tiles:
-            tiles = self.tab.eles('xpath://*[contains(@class, "flow-character-tile")]')
+            tiles = self.tab.eles('xpath://div[contains(@class, "character-tile-container")]')
 
         characters = []
         for idx, tile in enumerate(tiles):
-            name_ele = tile.ele("xpath:.//flow-tile-hover-footer/div/span", timeout=0) or tile.ele("xpath:.//span", timeout=0)
+            name_ele = tile.ele("xpath:.//span", timeout=0)
             name = name_ele.text.strip() if name_ele else ""
+            if not name:
+                name = tile.text.strip()
+
             img_ele = tile.ele("css:img", timeout=0)
             thumbnail_url = img_ele.attr("src") if img_ele else ""
             characters.append({"index": idx + 1, "name": name, "thumbnail_url": thumbnail_url})

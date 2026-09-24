@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from typing import Any, Awaitable, Callable, Optional
+
 from google.protobuf.struct_pb2 import Struct
 from loguru import logger
 
@@ -118,6 +118,12 @@ class Scheduler:
                     await self.credit_manager.reserve(worker.account, spec.job_id, spec.cost_credits)
                 except InsufficientCreditsError as e:
                     logger.warning(f"Credit reservation failed for job {spec.job_id} on {worker.worker_id}: {e}")
+                    remaining_queue.append(spec)
+                    continue
+                except Exception as e:
+                    logger.error(
+                        f"Unexpected error reserving credits for job {spec.job_id} on {worker.worker_id} (account={worker.account}): {e}"
+                    )
                     remaining_queue.append(spec)
                     continue
 

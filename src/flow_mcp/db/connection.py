@@ -4,6 +4,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
+
 import aiosqlite
 from loguru import logger
 
@@ -99,7 +100,7 @@ async def get_db_connection(db_path: str | None = None) -> AsyncGenerator[aiosql
     """Yield an aiosqlite connection with WAL mode and row_factory."""
     if db_path is None:
         db_path = get_settings().db_path
-    
+
     path_obj = Path(db_path)
     path_obj.parent.mkdir(parents=True, exist_ok=True)
 

@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 from typing import Any
+
 from mcp.server.fastmcp import FastMCP
-from loguru import logger
 
 from flow_mcp.browser.session import get_browser
 from flow_mcp.control.job_registry import JobRegistry
 from flow_mcp.db.project_dao import ProjectDAO
-from flow_mcp.models.params import CharacterCreateParams, CharacterCreateByUploadParams
+from flow_mcp.models.params import CharacterCreateByUploadParams, CharacterCreateParams
 from flow_mcp.pages.character_page import CharacterPage
 from flow_mcp.services.image_character_service import ImageCharacterService
 
@@ -84,7 +84,9 @@ def register_character_tools(
             url = f"{get_settings().google_flow_base_url}/project/{local_uuid}"
 
         browser = get_browser()
-        char_page = CharacterPage(browser.latest_tab)
+        tab = browser.latest_tab
+        assert not isinstance(tab, str)
+        char_page = CharacterPage(tab)
         characters = char_page.list_characters(project_url=url)
         return {
             "status": "success",

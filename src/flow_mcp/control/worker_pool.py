@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import Optional
+
 from loguru import logger
 
 from flow_mcp.models.job import JobSpec
@@ -32,6 +33,7 @@ class WorkerPool:
     ) -> WorkerInfo:
         """Register or re-connect a worker."""
         async with self._lock:
+            effective_account = account or f"{worker_id}@cluster.local"
             if worker_id in self._workers:
                 worker = self._workers[worker_id]
                 worker.phase = WorkerPhase.IDLE
@@ -41,7 +43,7 @@ class WorkerPool:
                 if project_mappings:
                     worker.project_mappings.update(project_mappings)
                 if cached_assets:
-                    worker.cached_assets = list(set(worker.cached_assets + cached_assets))
+                    worker.cached_assets.update(cached_assets)
                 if balance is not None:
                     worker.balance = balance
                 worker.daily_free = daily_free
@@ -50,11 +52,11 @@ class WorkerPool:
                 worker = WorkerInfo(
                     worker_id=worker_id,
                     phase=WorkerPhase.IDLE,
-                    account=account,
-                    daily_free=daily_free,
+                    account=effective_account,
+                    daily_free_remaining=daily_free,
                     balance=balance,
                     project_mappings=project_mappings or {},
-                    cached_assets=cached_assets or [],
+                    cached_assets=set(cached_assets or []),
                     last_heartbeat=time.time(),
                 )
                 self._workers[worker_id] = worker
@@ -117,7 +119,7 @@ class WorkerPool:
         async with self._lock:
             worker = self._workers.get(worker_id)
             if worker and asset_name not in worker.cached_assets:
-                worker.cached_assets.append(asset_name)
+                worker.cached_assets.add(asset_name)
 
     async def update_project_mapping(self, worker_id: str, project_alias: str, local_uuid: str) -> None:
         """Record project mapping for worker."""
@@ -134,6 +136,9 @@ class WorkerPool:
         disconnected: list[str] = []
         async with self._lock:
             for worker_id, worker in self._workers.items():
+                if worker_id == "master_local_worker":
+                    worker.last_heartbeat = now
+                    continue
                 if worker.phase != WorkerPhase.DISCONNECTED:
                     if now - worker.last_heartbeat > self.heartbeat_timeout:
                         worker.phase = WorkerPhase.DISCONNECTED

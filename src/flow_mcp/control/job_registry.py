@@ -4,15 +4,16 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import Any
+
 from loguru import logger
 
 from flow_mcp.db.job_dao import JobDAO
 from flow_mcp.models.job import (
+    FINISHED_PHASES,
     Job,
     JobPhase,
     JobSpec,
     JobStatus,
-    FINISHED_PHASES,
 )
 from flow_mcp.utils.errors import ResourceNotFoundError
 

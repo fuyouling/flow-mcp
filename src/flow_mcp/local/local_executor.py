@@ -2,19 +2,20 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any, Callable, Optional
+
 from loguru import logger
 
 from flow_mcp.browser.session import get_browser
 from flow_mcp.config import get_settings
 from flow_mcp.db.project_dao import ProjectDAO
 from flow_mcp.models.params import (
-    CharacterCreateParams,
     CharacterCreateByUploadParams,
-    ImageCreateParams,
+    CharacterCreateParams,
     ImageCreateByUploadParams,
+    ImageCreateParams,
     VideoCreateParams,
-    VideoCreateByUploadParams,
 )
 from flow_mcp.pages.character_page import CharacterPage
 from flow_mcp.pages.home_page import HomePage
@@ -48,6 +49,7 @@ class LocalExecutor:
         # Drive browser to inspect/create project
         browser = get_browser()
         tab = browser.latest_tab
+        assert not isinstance(tab, str)
         home = HomePage(tab)
         home.open()
 
@@ -76,6 +78,7 @@ class LocalExecutor:
         project_url = await self.ensure_project_url(project_alias)
         browser = get_browser()
         tab = browser.latest_tab
+        assert not isinstance(tab, str)
         img_page = ImagePage(tab)
 
         def run_sync():
@@ -103,6 +106,7 @@ class LocalExecutor:
         project_url = await self.ensure_project_url(project_alias)
         browser = get_browser()
         tab = browser.latest_tab
+        assert not isinstance(tab, str)
         img_page = ImagePage(tab)
 
         def run_sync():
@@ -125,6 +129,7 @@ class LocalExecutor:
         project_url = await self.ensure_project_url(project_alias)
         browser = get_browser()
         tab = browser.latest_tab
+        assert not isinstance(tab, str)
         char_page = CharacterPage(tab)
 
         def run_sync():
@@ -132,6 +137,7 @@ class LocalExecutor:
             char_page.click_new_character()
 
             portrait_b64 = char_page.generate_portrait(params.prompt, params.model_name)
+            char_page.rename_character(params.character_name)
             portrait_path = char_page.download_character_image(f"{params.character_name}_Portrait")
 
             fullbody_path = ""
@@ -158,17 +164,19 @@ class LocalExecutor:
         project_url = await self.ensure_project_url(project_alias)
         browser = get_browser()
         tab = browser.latest_tab
+        assert not isinstance(tab, str)
         char_page = CharacterPage(tab)
 
         def run_sync():
             char_page.navigate_to_characters(project_url)
             char_page.click_new_character()
             char_page.upload_portrait(params.portrait_image_path)
+            char_page.rename_character(params.character_name)
             portrait_path = char_page.download_character_image(f"{params.character_name}_Portrait")
 
             fullbody_path = ""
             if params.full_body_image_path:
-                char_page.upload_fullbody(params.full_body_image_path)
+                char_page.upload_portrait(params.full_body_image_path)
                 fullbody_path = char_page.download_character_image(f"{params.character_name}_Fullbody") or ""
 
             char_page.save_character()
@@ -190,6 +198,7 @@ class LocalExecutor:
         project_url = await self.ensure_project_url(project_alias)
         browser = get_browser()
         tab = browser.latest_tab
+        assert not isinstance(tab, str)
         vid_page = VideoPage(tab)
 
         def run_sync():
@@ -198,7 +207,12 @@ class LocalExecutor:
                 project_url=project_url,
                 prompt=params.prompt,
                 model_name=params.model_name,
+                mode=params.mode,
+                start_frame=params.start_frame,
+                end_frame=params.end_frame,
+                aspect_ratio=params.aspect_ratio,
                 resolution=params.resolution,
+                duration=params.duration,
                 quantity=f"x{params.quantity}",
                 assets=assets_list,
                 rename_name=params.video_name or "",
@@ -212,6 +226,7 @@ class LocalExecutor:
         """Fetch credits from Worker 0 browser."""
         browser = get_browser()
         tab = browser.latest_tab
+        assert not isinstance(tab, str)
         home = HomePage(tab)
         home.open()
         return home.get_credits()

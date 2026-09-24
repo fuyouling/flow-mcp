@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 from typing import Any
+
 from mcp.server.fastmcp import FastMCP
-from loguru import logger
 
 from flow_mcp.control.credit_manager import CreditManager
 from flow_mcp.control.job_registry import JobRegistry

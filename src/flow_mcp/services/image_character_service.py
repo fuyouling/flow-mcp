@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 import time
-from typing import Any
+from pathlib import Path
+
 from loguru import logger
 
 from flow_mcp.control.asset_hub import AssetHub
@@ -15,10 +15,10 @@ from flow_mcp.local.local_executor import LocalExecutor
 from flow_mcp.models.asset import AssetKind
 from flow_mcp.models.job import Job, JobPhase, JobSpec, TaskType
 from flow_mcp.models.params import (
-    CharacterCreateParams,
     CharacterCreateByUploadParams,
-    ImageCreateParams,
+    CharacterCreateParams,
     ImageCreateByUploadParams,
+    ImageCreateParams,
 )
 
 
@@ -103,17 +103,21 @@ class ImageCharacterService:
             )
 
             start_time = time.time()
+            loop = asyncio.get_running_loop()
 
             def progress_cb(pct: int, txt: str):
-                asyncio.run_coroutine_threadsafe(
-                    self.job_registry.update_status(
-                        job.job_id,
-                        progress_percent=pct,
-                        progress_text=txt,
-                        elapsed_seconds=round(time.time() - start_time, 1),
-                    ),
-                    asyncio.get_event_loop(),
-                )
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        self.job_registry.update_status(
+                            job.job_id,
+                            progress_percent=pct,
+                            progress_text=txt,
+                            elapsed_seconds=round(time.time() - start_time, 1),
+                        ),
+                        loop,
+                    )
+                except Exception as ex:
+                    logger.debug(f"Failed to update progress for job {job.job_id}: {ex}")
 
             res = await self.local_executor.create_image(
                 job.spec.project_alias, params, progress_cb=progress_cb

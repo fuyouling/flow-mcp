@@ -6,7 +6,7 @@ from loguru import logger
 from flow_mcp.control.job_registry import JobRegistry
 from flow_mcp.control.scheduler import Scheduler
 from flow_mcp.models.job import JobSpec, TaskType
-from flow_mcp.models.params import VideoCreateParams, VideoCreateByUploadParams
+from flow_mcp.models.params import VideoCreateByUploadParams, VideoCreateParams
 from flow_mcp.utils.credit_calc import calc_task_credits
 
 
@@ -27,6 +27,10 @@ class VideoService:
         """Submit text/image-to-video generation job. Returns job_id."""
         cost = calc_task_credits(TaskType.VIDEO_CREATE, params.model_dump())
         assets_list = [a.strip() for a in params.assets.split(",") if a.strip()] if params.assets else []
+        if params.start_frame and params.start_frame not in assets_list:
+            assets_list.append(params.start_frame)
+        if params.end_frame and params.end_frame not in assets_list:
+            assets_list.append(params.end_frame)
 
         spec = JobSpec(
             task_type=TaskType.VIDEO_CREATE,
@@ -44,7 +48,7 @@ class VideoService:
     async def create_video_by_upload(self, params: VideoCreateByUploadParams) -> str:
         """Submit video creation by uploading reference media. Returns job_id."""
         cost = calc_task_credits(TaskType.VIDEO_CREATE_BY_UPLOAD, params.model_dump())
-        assets_list = [a.strip() for a in params.assets.split(",") if a.strip()] if params.assets else []
+        assets_list = []
 
         spec = JobSpec(
             task_type=TaskType.VIDEO_CREATE_BY_UPLOAD,

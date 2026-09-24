@@ -2,16 +2,17 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 import tempfile
+from pathlib import Path
 from typing import AsyncGenerator
+
+import grpc
+import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-import grpc
-from grpc import aio as grpc_aio
 from google.protobuf.json_format import MessageToDict
+from grpc import aio as grpc_aio
 from loguru import logger
-import uvicorn
 
 from flow_mcp.config import get_settings
 from flow_mcp.control.asset_hub import AssetHub
@@ -53,7 +54,7 @@ class FlowClusterServicer(flow_pb2_grpc.FlowClusterServicer):
         await q.put(message)
         return True
 
-    async def StreamTasks(
+    async def StreamTasks(  # type: ignore[override]
         self,
         request_iterator: AsyncGenerator[flow_pb2.WorkerMessage, None],
         context: grpc.aio.ServicerContext,
@@ -85,6 +86,12 @@ class FlowClusterServicer(flow_pb2_grpc.FlowClusterServicer):
 
                         for alias, uuid in mappings.items():
                             await self.project_dao.upsert_project(alias, worker_id, uuid)
+
+                        if req.account:
+                            await self.credit_manager.update_from_worker(
+                                worker_id=worker_id,
+                                email=req.account,
+                            )
 
                         # Send ACK
                         ack = flow_pb2.MasterMessage(

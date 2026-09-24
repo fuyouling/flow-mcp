@@ -1,17 +1,18 @@
 """Data Access Object for Accounts and Credit Reservations."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import uuid
+from datetime import datetime, timezone
+
 import aiosqlite
 from loguru import logger
 
 from flow_mcp.db.connection import get_db_connection
 from flow_mcp.models.credit import (
+    DAILY_FREE_GRANT,
     AccountInfo,
     CreditReservation,
     ReservationState,
-    DAILY_FREE_GRANT,
     get_current_cycle_date,
 )
 from flow_mcp.utils.errors import InsufficientCreditsError, ResourceNotFoundError
@@ -176,7 +177,17 @@ class AccountDAO:
         """
         account = await self.get_account(email)
         if not account:
-            raise ResourceNotFoundError(f"Account '{email}' not found")
+            if not email:
+                raise ResourceNotFoundError("Account email cannot be empty")
+            # Auto-provision account with daily free credits grant
+            account = AccountInfo(
+                email=email,
+                daily_free_remaining=DAILY_FREE_GRANT,
+                daily_cycle_date=get_current_cycle_date(),
+                updated_at=datetime.now(timezone.utc).isoformat(),
+            )
+            await self.upsert_account(account)
+            logger.info(f"Auto-provisioned account '{email}' with {DAILY_FREE_GRANT} daily free credits.")
 
         total_avail = account.daily_free_remaining + (account.balance or 0)
         if total_avail < cost:

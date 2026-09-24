@@ -1,9 +1,7 @@
 """Pydantic parameter models for MCP tools and services."""
 from __future__ import annotations
 
-from typing import Any, Literal
-from pydantic import BaseModel, Field
-
+from pydantic import BaseModel
 
 # ── Project Parameters ──────────────────────────────
 
@@ -58,11 +56,16 @@ class ImageListParams(BaseModel):
 class VideoCreateParams(BaseModel):
     project_name: str = "default"
     prompt: str
-    model_name: str = "Omni 1.1 Flash"
-    resolution: str = "720p"
-    quantity: int = 1
-    assets: str = ""
     video_name: str = ""
+    model_name: str = "Omni 1.1 Flash"
+    mode: str = "asset"
+    start_frame: str = ""
+    end_frame: str = ""
+    assets: str = ""
+    aspect_ratio: str = "16:9"
+    resolution: str = "720p"
+    duration: int = 8
+    quantity: int = 1
     download: str = "720p"
 
 

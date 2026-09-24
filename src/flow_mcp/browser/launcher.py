@@ -5,6 +5,8 @@ import os
 import re
 from pathlib import Path
 from typing import Mapping
+
+# pyrefly: ignore [untyped-import]
 import yaml
 from loguru import logger
 
@@ -13,15 +15,16 @@ from flow_mcp.config import get_settings
 
 def _expand_env_vars(text: str, env_vars: Mapping[str, str] | None = None) -> str:
     """Expand environment variables in text supporting ${VAR} and $VAR formats."""
-    merged = dict(os.environ)
+    merged: dict[str, str] = dict(os.environ)
     if env_vars:
         for k, v in env_vars.items():
             if v is not None:
+                # pyrefly: ignore [unnecessary-type-conversion]
                 merged[k] = str(v)
 
     def _sub(m: re.Match) -> str:
         var_name = m.group(1) or m.group(2)
-        return merged.get(var_name, m.group(0))
+        return str(merged.get(var_name, m.group(0)))
 
     return re.sub(r"\$\{([A-Za-z0-9_]+)\}|\$([A-Za-z0-9_]+)", _sub, text)
 

@@ -116,6 +116,55 @@ flow-mcp status
 ```
 此时应能查看到内置的 `master_local_worker` 处于 `IDLE` 状态，拥有 50 每日免费积分。
 
+> **说明**：Master 节点在启动时会自动在集群控制面中注册并托管内置执行器 `master_local_worker`（即 Worker 0），并通过本机的 Chrome 实例直接执行任务。因此在单节点调试模式下，**无需手动执行 `flow-mcp worker` 启动额外进程**。当需要多账号或多节点协同测试时，请参考下方的 [场景二](#4-场景二单机模拟多-worker-集群调试)。
+
+### 步骤 4：发起工具调用测试（客户端 / 智能体接入）
+
+Master 启动成功后，需要由 **MCP Client（调用端）** 向其发送请求才能真正触发工具执行。我们推荐以下两种方式进行测试：
+
+#### 方式 A：使用官方 MCP Inspector 直连测试（推荐，无需智能体/大模型）
+适用于日常开发与单工具功能快速验证，免消耗 Token 且能在 Web 界面直观操作：
+
+**途径 1：在当前打开的 Inspector 网页中添加连接（对应新版多 Server 界面）**
+如果你已经运行 `npx @modelcontextprotocol/inspector` 并看到了包含示例服务器的卡片列表：
+1. 点击右上角蓝色按钮 **`Add Servers ▾`**；
+2. 在弹出配置项中填写：
+   - **Name**: `flow-mcp`
+   - **Transport Type**: 选择 `SSE`
+   - **URL**: 输入 `http://localhost:8000/sse`
+3. 保存后，卡片列表中会新增 `flow-mcp` 卡片；
+4. 将该卡片右上角的 **Disconnected 开关拨到右侧开启**（变为绿色的 `Connected`）；
+5. 连接成功后，顶部或卡片内就会出现 **Tools**（工具列表）标签页，点击即可查看并调用全部 17 个工具！
+
+**途径 2：通过命令行参数直接一步打开（免手动填写）**
+在终端运行带参数的命令，Inspector 会直接连接并展示工具界面：
+```powershell
+npx @modelcontextprotocol/inspector --transport sse --server-url http://localhost:8000/sse
+```
+连接后在 **Tools** 页面选择工具、输入参数并点击 **Run Tool**，即可观察 Chrome 浏览器自动执行页面操作。
+
+#### 方式 B：配置到 AI 智能体（Claude / Cursor / Windsurf 等端到端联调）
+适用于日常自然语言交互，让 AI 自动规划并调用工具。
+
+- **Claude Desktop**（编辑 `%APPDATA%\Claude\claude_desktop_config.json`）：
+  ```json
+  {
+    "mcpServers": {
+      "flow-cluster": {
+        "command": "c:\\dev\\ai\\mcp\\flow-mcp\\.venv\\Scripts\\flow-mcp.exe",
+        "args": ["master", "--transport", "stdio"],
+        "cwd": "c:\\dev\\ai\\mcp\\flow-mcp"
+      }
+    }
+  }
+  ```
+- **Cursor**（`Settings` -> `Features` -> `MCP Servers` -> `Add New MCP Server`）：
+  - **Name**: `flow-cluster`
+  - **Type**: `command`
+  - **Command**: `c:\dev\ai\mcp\flow-mcp\.venv\Scripts\flow-mcp.exe master --transport stdio`
+
+配置完成后，直接在对话框中对 AI 发送自然语言指令（例如：*“帮我查询 Flow 项目列表”* 或 *“在项目 demo 中生成一张赛博朋克猫咪”*），智能体将自动规划并调用对应的 MCP 工具。
+
 ---
 
 ## 4. 场景二：单机模拟多 Worker 集群调试
@@ -211,17 +260,27 @@ flow-mcp status
 ## 6. 场景四：MCP Client（Inspector / Claude / Cursor）调试
 
 ### 6.1 使用官方 MCP Inspector 进行交互式可视化调试（强烈推荐）
-MCP Inspector 允许在 Web 界面中点击调用每一个工具，实时输入 JSON 参数并检查工具输出：
+MCP Inspector 允许在 Web 界面中点击调用每一个工具，实时输入 JSON 参数并检查工具输出。支持两种连接方式：
 
+#### 方式 1：连接已运行的 SSE Master（配合场景一调试使用）
+如果 Master 已经通过 `flow-mcp master --transport sse --port 8000` 在后台或终端中运行：
+```powershell
+npx @modelcontextprotocol/inspector
+```
+打开 Web 界面（默认 `http://localhost:5173`）后：
+1. **Transport Type** 选择 `SSE`。
+2. **URL** 填入 `http://localhost:8000/sse`。
+3. 点击 **Connect** 即可无缝接入。
+
+#### 方式 2：由 Inspector 直接拉起 Master 进程（Stdio 模式）
+无需预先运行 Master 命令，由 Inspector 自动托管并启动子进程：
 ```powershell
 npx @modelcontextprotocol/inspector c:\dev\ai\mcp\flow-mcp\.venv\Scripts\flow-mcp.exe master --transport stdio
 ```
 
-执行后：
-1. 控制台会输出 Inspector 页面链接（如 `http://localhost:5173` 或类似地址）。
-2. 在浏览器中打开该链接。
-3. 点击 **List Tools**，可以看到 `flow-mcp` 注册的 17 个全部工具。
-4. 可以直接点击 `project_list` 或 `task_queue_status` 进行调用测试，查看底层实时交互。
+连接成功后：
+1. 点击 **List Tools**，可以看到 `flow-mcp` 注册的 17 个全部工具。
+2. 可以直接点击 `project_list` 或 `task_queue_status` 等工具输入参数进行调用测试，观察底层实时交互与浏览器执行过程。
 
 ### 6.2 在 Claude Desktop 中联调
 编辑 Claude Desktop 配置文件：`%APPDATA%\Claude\claude_desktop_config.json`：

@@ -1,16 +1,17 @@
 """Unit tests for SQLite database DAOs."""
-import pytest
 import tempfile
 from pathlib import Path
 
+import pytest
+
+from flow_mcp.db.account_dao import AccountDAO
+from flow_mcp.db.asset_dao import AssetDAO
 from flow_mcp.db.connection import init_db
 from flow_mcp.db.job_dao import JobDAO
-from flow_mcp.db.account_dao import AccountDAO
 from flow_mcp.db.project_dao import ProjectDAO
-from flow_mcp.db.asset_dao import AssetDAO
-from flow_mcp.models.job import Job, JobSpec, JobStatus, TaskType, JobPhase
-from flow_mcp.models.credit import AccountInfo, CreditReservation, ReservationState
-from flow_mcp.models.asset import AssetRecord, AssetKind
+from flow_mcp.models.asset import AssetKind, AssetRecord
+from flow_mcp.models.credit import AccountInfo, ReservationState
+from flow_mcp.models.job import Job, JobPhase, JobSpec, TaskType
 
 
 @pytest.fixture
@@ -46,6 +47,7 @@ async def test_job_dao_crud(temp_db):
     await dao.update_status(job.status)
 
     updated = await dao.get_job("test_job_1")
+    assert updated is not None
     assert updated.status.phase == JobPhase.COMPLETED
     assert updated.status.is_finished is True
     assert updated.status.result["url"] == "http://example.com"
@@ -70,14 +72,30 @@ async def test_account_dao_reservation(temp_db):
 
     # Check updated account
     acc = await dao.get_account("test@google.com")
+    assert acc is not None
     assert acc.daily_free_remaining == 0
     assert acc.balance == 90
 
     # Release reservation (failure refund)
     await dao.release_reservation("job_123")
     acc_refunded = await dao.get_account("test@google.com")
+    assert acc_refunded is not None
     assert acc_refunded.daily_free_remaining == 50
     assert acc_refunded.balance == 100
+
+
+@pytest.mark.asyncio
+async def test_account_dao_autoprovision_reservation(temp_db):
+    dao = AccountDAO(temp_db)
+    # Account is not yet created, reserve 10 credits (less than daily free grant 50)
+    res = await dao.reserve_credits("new_worker@google.com", "job_456", 10)
+    assert res.reserved_free == 10
+    assert res.reserved_balance == 0
+    assert res.state == ReservationState.PENDING
+
+    acc = await dao.get_account("new_worker@google.com")
+    assert acc is not None
+    assert acc.daily_free_remaining == 40
 
 
 @pytest.mark.asyncio

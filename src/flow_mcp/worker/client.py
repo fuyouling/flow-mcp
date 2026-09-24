@@ -4,8 +4,8 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import AsyncGenerator
+
 from google.protobuf.struct_pb2 import Struct
-import grpc
 from grpc import aio as grpc_aio
 from loguru import logger
 
@@ -69,7 +69,7 @@ class WorkerClient:
         credits_val = None
         try:
             browser = get_browser()
-            home = HomePage(browser.latest_tab)
+            home = HomePage(browser.latest_tab) # type: ignore
             home.open()
             account_email = home.get_account_email() or ""
             credits_val = home.get_credits()
@@ -77,6 +77,9 @@ class WorkerClient:
             self.executor.project_mappings = {name: p["local_uuid"] for name, p in projects.items()}
         except Exception as e:
             logger.debug(f"Pre-flight browser inspection note: {e}")
+
+        if not account_email:
+            account_email = get_settings().worker_account or ""
 
         async with grpc_aio.insecure_channel(self.master_grpc_target) as channel:
             stub = flow_pb2_grpc.FlowClusterStub(channel)
@@ -92,8 +95,8 @@ class WorkerClient:
             )
             await self._out_queue.put(reg_msg)
 
-            # Send initial credits update if found
-            if credits_val is not None:
+            # Send initial credits update if account_email is known
+            if account_email:
                 acct_msg = flow_pb2.WorkerMessage(
                     account_update=flow_pb2.AccountUpdate(
                         worker_id=self.worker_id,

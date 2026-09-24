@@ -1,7 +1,6 @@
 """Unit tests for credit calculation."""
-import pytest
-from flow_mcp.utils.credit_calc import calc_video_credits, calc_task_credits, parse_quantity_multiplier
 from flow_mcp.models.job import TaskType
+from flow_mcp.utils.credit_calc import calc_task_credits, calc_video_credits, parse_quantity_multiplier
 
 
 def test_parse_quantity_multiplier():

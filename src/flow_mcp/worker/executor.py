@@ -4,17 +4,16 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from typing import Any, Callable, Coroutine
-from google.protobuf.json_format import MessageToDict
+
 import httpx
+from google.protobuf.json_format import MessageToDict
 from loguru import logger
 
 from flow_mcp.browser.session import get_browser
 from flow_mcp.config import get_settings
 from flow_mcp.models.asset import AssetKind
 from flow_mcp.models.job import TaskType
-from flow_mcp.pages.character_page import CharacterPage
 from flow_mcp.pages.home_page import HomePage
-from flow_mcp.pages.image_page import ImagePage
 from flow_mcp.pages.video_page import VideoPage
 from flow_mcp.proto import flow_pb2
 from flow_mcp.worker.asset_syncer import AssetSyncer
@@ -52,7 +51,8 @@ class WorkerExecutor:
 
         browser = get_browser()
         tab = browser.latest_tab
-        home = HomePage(tab)
+        # pyright complains about MixTab | str, we know it's MixTab here or we cast it
+        home = HomePage(tab) # type: ignore
         home.open()
 
         projects = home.get_projects()
@@ -129,10 +129,15 @@ class WorkerExecutor:
 
         # ── 3. Video Create ────────────────────────────────
         elif task_type in (TaskType.VIDEO_CREATE, TaskType.VIDEO_CREATE_BY_UPLOAD):
-            vid_page = VideoPage(tab)
+            vid_page = VideoPage(tab) # type: ignore
+
+            loop = asyncio.get_running_loop()
 
             def sync_progress(pct: int, txt: str):
-                asyncio.run_coroutine_threadsafe(progress_cb(pct, txt), asyncio.get_event_loop())
+                try:
+                    asyncio.run_coroutine_threadsafe(progress_cb(pct, txt), loop)
+                except Exception as ex:
+                    logger.debug(f"Failed to update task progress: {ex}")
 
             def run_gen():
                 assets_list = [a.strip() for a in params.get("assets", "").split(",") if a.strip()]
@@ -140,7 +145,12 @@ class WorkerExecutor:
                     project_url=project_url,
                     prompt=params.get("prompt", ""),
                     model_name=params.get("model_name", "Omni 1.1 Flash"),
+                    mode=params.get("mode", "asset"),
+                    start_frame=params.get("start_frame", ""),
+                    end_frame=params.get("end_frame", ""),
+                    aspect_ratio=params.get("aspect_ratio", "16:9"),
                     resolution=params.get("resolution", "720p"),
+                    duration=int(params.get("duration", 8)),
                     quantity=f"x{params.get('quantity', 1)}",
                     assets=assets_list,
                     rename_name=params.get("video_name", f"video_{task.job_id[:8]}"),
@@ -158,19 +168,19 @@ class WorkerExecutor:
             # Upload video back to Master AssetHub
             hub_record = await self._upload_result_to_hub(
                 file_path=Path(local_path),
-                name=video_name,
+                name=video_name or "video",
                 kind=AssetKind.VIDEO,
                 job_id=task.job_id,
             )
 
             produced = [
                 flow_pb2.AssetInfo(
-                    name=video_name,
+                    name=video_name or "video",
                     kind="video",
                     local_path=str(local_path),
                 )
             ]
-            return {"video_name": video_name, "asset_hub": hub_record}, produced
+            return {"video_name": video_name or "video", "asset_hub": hub_record}, produced
 
         else:
             raise NotImplementedError(f"Unsupported task type on worker: {task_type}")

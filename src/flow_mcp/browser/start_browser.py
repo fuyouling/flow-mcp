@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 import argparse
-import sys
 import time
-from loguru import logger
 
 from flow_mcp.browser.launcher import get_browser_port
-from flow_mcp.browser.session import get_browser, close_browser
-from flow_mcp.browser.utils import is_port_in_use, stop_browser, get_process_by_port
+from flow_mcp.browser.session import get_browser
+from flow_mcp.browser.utils import get_process_by_port, is_port_in_use, stop_browser
 from flow_mcp.config import get_settings
 
 
@@ -48,6 +46,7 @@ def main() -> None:
     target_url = args.url or get_settings().google_flow_base_url
     if target_url:
         tab = browser.latest_tab
+        assert not isinstance(tab, str)
         tab.get(target_url)
         print(f"Navigated to {target_url}")
     print("Browser is ready.")

@@ -1,9 +1,11 @@
 """Browser process and port utilities."""
 from __future__ import annotations
 
-import socket
 import os
+import socket
 from typing import Optional
+
+# pyrefly: ignore [untyped-import]
 import psutil
 from loguru import logger
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Optional
+
 from loguru import logger
 
 from flow_mcp.db.account_dao import AccountDAO

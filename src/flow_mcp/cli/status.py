@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import argparse
 import json
+
 import httpx
+
 from flow_mcp.config import get_settings
 
 
@@ -21,7 +23,8 @@ def main() -> None:
 
     url = f"{args.url.rstrip('/')}/status"
     try:
-        resp = httpx.get(url, timeout=5.0)
+        with httpx.Client(trust_env=False, timeout=5.0) as client:
+            resp = client.get(url)
         if resp.status_code != 200:
             print(f"Error querying cluster status: HTTP {resp.status_code}")
             return
