@@ -75,11 +75,12 @@ class CreditManager:
                 existing.daily_free_remaining = daily_free
             await self.upsert_account(existing)
         else:
+            from flow_mcp.models.credit import DAILY_FREE_GRANT
             new_acc = AccountInfo(
                 email=email,
                 worker_id=worker_id,
                 balance=balance,
-                daily_free_remaining=daily_free if daily_free is not None else 50,
+                daily_free_remaining=daily_free if daily_free is not None else DAILY_FREE_GRANT,
             )
             await self.upsert_account(new_acc)
         logger.info(f"Updated account info for worker {worker_id}: {email} (balance={balance})")

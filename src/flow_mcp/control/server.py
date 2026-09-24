@@ -77,11 +77,17 @@ class FlowClusterServicer(flow_pb2_grpc.FlowClusterServicer):
                         mappings = dict(req.project_mappings)
                         cached = list(req.cached_assets)
 
+                        # Read from DB to get the actual daily_free_remaining for memory cache
+                        from flow_mcp.models.credit import DAILY_FREE_GRANT
+                        existing_acc = await self.credit_manager.get_account(req.account) if req.account else None
+                        current_daily_free = existing_acc.daily_free_remaining if existing_acc else DAILY_FREE_GRANT
+
                         await self.worker_pool.register_worker(
                             worker_id=worker_id,
                             account=req.account,
                             project_mappings=mappings,
                             cached_assets=cached,
+                            daily_free=current_daily_free,
                         )
 
                         for alias, uuid in mappings.items():
@@ -91,6 +97,7 @@ class FlowClusterServicer(flow_pb2_grpc.FlowClusterServicer):
                             await self.credit_manager.update_from_worker(
                                 worker_id=worker_id,
                                 email=req.account,
+                                daily_free=current_daily_free,
                             )
 
                         # Send ACK

@@ -25,7 +25,7 @@ class WorkerInfo(BaseModel):
     current_job_id: str | None = None
     project_mappings: dict[str, str] = Field(default_factory=dict)
     cached_assets: set[str] = Field(default_factory=set)
-    daily_free_remaining: int = 50
+    daily_free_remaining: int = Field(default_factory=lambda: __import__('flow_mcp.models.credit', fromlist=['DAILY_FREE_GRANT']).DAILY_FREE_GRANT)
     balance: int | None = None
     last_heartbeat: float = Field(default_factory=time.time)
     consecutive_failures: int = 0

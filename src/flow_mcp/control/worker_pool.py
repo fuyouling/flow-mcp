@@ -28,7 +28,7 @@ class WorkerPool:
         account: str = "",
         project_mappings: dict[str, str] | None = None,
         cached_assets: list[str] | None = None,
-        daily_free: int = 50,
+        daily_free: int | None = None,
         balance: Optional[int] = None,
     ) -> WorkerInfo:
         """Register or re-connect a worker."""
@@ -46,14 +46,16 @@ class WorkerPool:
                     worker.cached_assets.update(cached_assets)
                 if balance is not None:
                     worker.balance = balance
-                worker.daily_free = daily_free
+                if daily_free is not None:
+                    worker.daily_free = daily_free
                 logger.info(f"Worker {worker_id} re-registered / reconnected.")
             else:
+                from flow_mcp.models.credit import DAILY_FREE_GRANT
                 worker = WorkerInfo(
                     worker_id=worker_id,
                     phase=WorkerPhase.IDLE,
                     account=effective_account,
-                    daily_free_remaining=daily_free,
+                    daily_free=daily_free if daily_free is not None else DAILY_FREE_GRANT,
                     balance=balance,
                     project_mappings=project_mappings or {},
                     cached_assets=set(cached_assets or []),
@@ -154,13 +156,12 @@ class WorkerPool:
         1. Availability (IDLE & connected)
         2. Can afford credit cost (free + balance >= cost)
         3. If target_worker_id is set (e.g. broadcast), must match
-        4. Tiered priority routing:
-           - Tier 1: daily_free >= cost
-           - Tier 2: 0 < daily_free < cost
-           - Tier 3: daily_free == 0
+        4. Priority routing:
+           - Highest daily_free first
+           - Highest balance first
+           - Lowest consecutive failures first
         """
         cost = spec.cost_credits
-        required_assets = set(spec.required_assets)
 
         async with self._lock:
             candidates: list[WorkerInfo] = []
@@ -176,42 +177,11 @@ class WorkerPool:
             if not candidates:
                 return None
 
-            tier1: list[WorkerInfo] = []  # daily_free >= cost
-            tier2: list[WorkerInfo] = []  # 0 < daily_free < cost
-            tier3: list[WorkerInfo] = []  # daily_free == 0
-
-            for w in candidates:
-                if w.daily_free >= cost:
-                    tier1.append(w)
-                elif w.daily_free > 0:
-                    tier2.append(w)
-                else:
-                    tier3.append(w)
-
-            def score_tier1(w: WorkerInfo):
-                asset_hits = len(set(w.cached_assets) & required_assets)
-                # higher daily_free first, higher asset_hits first, lower failures first
-                return (-w.daily_free, -asset_hits, w.consecutive_failures)
-
-            def score_tier2(w: WorkerInfo):
-                asset_hits = len(set(w.cached_assets) & required_assets)
-                return (-w.daily_free, -asset_hits, w.consecutive_failures)
-
-            def score_tier3(w: WorkerInfo):
-                asset_hits = len(set(w.cached_assets) & required_assets)
+            def score_worker(w: WorkerInfo):
                 bal = w.balance or 0
-                return (-asset_hits, -bal, w.consecutive_failures)
+                return (-w.daily_free, -bal, w.consecutive_failures)
 
-            if tier1:
-                tier1.sort(key=score_tier1)
-                return tier1[0]
-            if tier2:
-                tier2.sort(key=score_tier2)
-                return tier2[0]
-            if tier3:
-                tier3.sort(key=score_tier3)
-                return tier3[0]
-
+            candidates.sort(key=score_worker)
             return candidates[0]
 
     async def get_worker(self, worker_id: str) -> WorkerInfo | None:

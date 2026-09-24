@@ -135,17 +135,22 @@ class FlowMCPGateway:
 
         # Register Master's Worker 0 in pool
         local_account = account_email or self.settings.worker_account or "master_local@google.com"
+        
+        from flow_mcp.models.credit import DAILY_FREE_GRANT
+        existing_acc = await self.account_dao.get_account(local_account) if local_account else None
+        current_daily_free = existing_acc.daily_free_remaining if existing_acc else DAILY_FREE_GRANT
+
         await self.worker_pool.register_worker(
             worker_id="master_local_worker",
             account=local_account,
-            daily_free=50,
+            daily_free=current_daily_free,
         )
         if local_account:
             await self.credit_manager.update_from_worker(
                 worker_id="master_local_worker",
                 email=local_account,
                 balance=credits_val,
-                daily_free=50,
+                daily_free=current_daily_free,
             )
 
         # Configure local task dispatcher for Worker 0 video tasks
