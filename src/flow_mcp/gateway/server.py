@@ -217,16 +217,91 @@ class FlowMCPGateway:
         await self.master_server.stop()
         logger.info("FlowMCPGateway shut down.")
 
+    def create_unified_app(self):
+        """Create a unified Starlette app supporting SSE, messages, and Streamable HTTP (/mcp and /sse)."""
+        from starlette.applications import Starlette
+        from starlette.responses import JSONResponse
+        from starlette.routing import Route
+
+        sse_app = self.mcp.sse_app()
+        http_app = self.mcp.streamable_http_app()
+
+        sse_route = [r for r in sse_app.routes if getattr(r, "path", "") == self.mcp.settings.sse_path][0]
+        messages_mount = [r for r in sse_app.routes if getattr(r, "path", "") == self.mcp.settings.message_path][0]
+        http_route = [r for r in http_app.routes if getattr(r, "path", "") == self.mcp.settings.streamable_http_path][0]
+
+        class CombinedSSEEndpoint:
+            async def __call__(self, scope, receive, send):
+                if scope["method"] == "GET":
+                    headers = dict(scope.get("headers", []))
+                    if b"mcp-session-id" in headers:
+                        await http_route.app(scope, receive, send)
+                    else:
+                        await sse_route.app(scope, receive, send)
+                else:
+                    await http_route.app(scope, receive, send)
+
+        async def health_check(request):
+            return JSONResponse({
+                "status": "healthy",
+                "service": "flow-mcp",
+                "endpoints": {
+                    "sse": self.mcp.settings.sse_path,
+                    "streamable_http": self.mcp.settings.streamable_http_path,
+                    "messages": self.mcp.settings.message_path,
+                },
+            })
+
+        routes = [
+            Route("/", endpoint=health_check, methods=["GET"]),
+            Route(self.mcp.settings.sse_path, endpoint=CombinedSSEEndpoint(), methods=["GET", "POST", "HEAD", "OPTIONS"]),
+            Route(self.mcp.settings.streamable_http_path, endpoint=http_route.app, methods=["GET", "POST", "DELETE", "OPTIONS"]),
+            messages_mount,
+        ]
+
+        class AcceptHeaderMiddleware:
+            def __init__(self, app):
+                self.app = app
+
+            async def __call__(self, scope, receive, send):
+                if scope["type"] == "http":
+                    headers = dict(scope.get("headers", []))
+                    accept = headers.get(b"accept", b"").decode("latin1")
+                    needed = []
+                    if "application/json" not in accept:
+                        needed.append("application/json")
+                    if "text/event-stream" not in accept:
+                        needed.append("text/event-stream")
+                    if needed:
+                        new_accept = (accept + ", " + ", ".join(needed)).strip(", ")
+                        new_headers = [(k, v) for k, v in scope.get("headers", []) if k.lower() != b"accept"]
+                        new_headers.append((b"accept", new_accept.encode("latin1")))
+                        scope = dict(scope)
+                        scope["headers"] = new_headers
+                await self.app(scope, receive, send)
+
+        raw_app = Starlette(routes=routes, lifespan=lambda _: self.mcp.session_manager.run())
+        return AcceptHeaderMiddleware(raw_app)
+
     async def run_async(self, transport: str = "stdio", port: int = 8000) -> None:
         """Run Master background services and FastMCP within the same event loop."""
         await self.initialize()
         try:
-            logger.info(f"Running FastMCP server with transport='{transport}'...")
+            logger.info(f"Running FastMCP server with transport='{transport}' on port {port}...")
             if transport == "stdio":
                 await self.mcp.run_stdio_async()
             else:
-                self.mcp.settings.port = port
-                await self.mcp.run_sse_async()
+                import uvicorn
+
+                unified_app = self.create_unified_app()
+                config = uvicorn.Config(
+                    unified_app,
+                    host="0.0.0.0",
+                    port=port,
+                    log_level="info",
+                )
+                server = uvicorn.Server(config)
+                await server.serve()
         finally:
             await self.shutdown()
 

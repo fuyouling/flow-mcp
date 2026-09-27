@@ -11,7 +11,7 @@ from flow_mcp.gateway.server import FlowMCPGateway
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Start Flow MCP Master node (MCP Gateway + Cluster Control)")
-    parser.add_argument("--transport", type=str, choices=["stdio", "sse"], default="stdio", help="MCP transport protocol")
+    parser.add_argument("--transport", type=str, choices=["stdio", "sse", "http", "streamable-http"], default="sse", help="MCP transport protocol")
     parser.add_argument("--port", type=int, default=8000, help="Port if using SSE transport")
     args = parser.parse_args()
 
