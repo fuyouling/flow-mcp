@@ -226,9 +226,9 @@ class FlowMCPGateway:
         sse_app = self.mcp.sse_app()
         http_app = self.mcp.streamable_http_app()
 
-        sse_route = [r for r in sse_app.routes if getattr(r, "path", "") == self.mcp.settings.sse_path][0]
-        messages_mount = [r for r in sse_app.routes if getattr(r, "path", "") == self.mcp.settings.message_path][0]
-        http_route = [r for r in http_app.routes if getattr(r, "path", "") == self.mcp.settings.streamable_http_path][0]
+        sse_route = [r for r in sse_app.routes if getattr(r, "path", "").rstrip("/") == self.mcp.settings.sse_path.rstrip("/")][0]
+        messages_mount = [r for r in sse_app.routes if getattr(r, "path", "").rstrip("/") == self.mcp.settings.message_path.rstrip("/")][0]
+        http_route = [r for r in http_app.routes if getattr(r, "path", "").rstrip("/") == self.mcp.settings.streamable_http_path.rstrip("/")][0]
 
         class CombinedSSEEndpoint:
             async def __call__(self, scope, receive, send):
