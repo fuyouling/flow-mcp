@@ -204,12 +204,12 @@ sequenceDiagram
 当工具报错连接超时或浏览器未就绪时，智能体可指导用户或通过终端使用统一脚本进行自检与拉起：
 
 - **控制台交互式菜单**：直接运行 `.\flow_mcp.bat`（或 `.\flow_mcp.ps1`）。
-- **常用参数化命令**：
-  - `.\flow_mcp.bat status`：探测端口健康度（FastMCP 8000, gRPC 50051, HTTP 8765）、Chrome 自动化浏览器及账户余额。
-  - `.\flow_mcp.bat browser start`：启动 Chrome 自动化浏览器实例（默认 CDP 端口 9222）。
-  - `.\flow_mcp.bat master -Port 8000`：启动 Master 服务主进程。
-  - `.\flow_mcp.bat worker -WorkerId worker_node_1`：启动分布式 Worker 工作节点。
-  - `.\flow_mcp.bat stop`：停止所有运行中的集群进程。
+- **统一参数化命令（末尾统一规范为 `[status|start|stop]`，所有配置默认从 `.env` 读取，无需且不许在命令行传参）**：
+  - `.\flow_mcp.bat master [status|start|stop]`：管理 Master 核心网关（端口 8000/8765/50051 及本地 Worker 0）
+  - `.\flow_mcp.bat worker [status|start|stop]`：管理分布式 Worker 执行节点（Worker ID、Master 连接目标自 `.env` 自动载入）
+  - `.\flow_mcp.bat browser [status|start|stop]`：管理 Chrome 自动化浏览器实例
+  - `.\flow_mcp.bat status`：全局综合健康巡检（Master、Worker、浏览器及集群积分池）
+  - `.\flow_mcp.bat stop`：一键停止集群后台服务（Master + Worker）
 
 ---
 
