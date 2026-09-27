@@ -28,7 +28,7 @@ def register_character_tools(
         prompt: Annotated[str, Field(description="生成角色头像（肖像）的提示词。必须严格使用全英文并且遵守官方模板，若要生成全身像，需保持描述主体的一致性。")],
         project_name: Annotated[str, Field(description="Google Flow 项目的名称，留空则自动选用最近访问的项目")] = "default",
         model_name: Annotated[str, Field(description="用于生成图片的模型名称")] = "Nano banana pro",
-        full_body: Annotated[bool, Field(description="是否一并生成角色的全身像")] = False,
+        full_body: Annotated[bool, Field(description="是否一并生成角色的全身像")] = True,
         full_body_prompt: Annotated[str, Field(description="生成全身像的提示词。只有在 full_body 为 True 时生效。必须严格使用全英文并且遵守官方模板。")] = "",
         voice_name: Annotated[str, Field(description="角色的声音名称，例如 'Journey'")] = "",
         voice_style: Annotated[str, Field(description="角色的声音风格/口音描述")] = "",

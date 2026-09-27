@@ -35,9 +35,31 @@ class FlowMCPGateway:
     """Encapsulates FastMCP server and Master cluster subsystems."""
 
     def __init__(self):
+        instructions = (
+            "Google Agentspace Flow cluster-native media automation service.\n\n"
+            "## Core Capabilities\n"
+            "1. Project Management: project_list, project_open, project_create, project_rename.\n"
+            "2. Virtual Character Creation: character_create, character_create_by_upload, character_list, character_status.\n"
+            "   - Generates portraits and full-body images. Master broadcasts character assets across all active cluster nodes.\n"
+            "3. Image Generation: image_create, image_create_by_upload, image_list, image_status.\n"
+            "   - Generates images using models like 'Nano banana pro', with aspect ratio, resolution, and asset references.\n"
+            "4. Video Generation: video_create, video_create_by_upload, video_list, video_status.\n"
+            "   - Text/image-to-video with credit-priority routing across workers, automatic JIT asset alignment, and video delivery.\n"
+            "5. Cluster & Queue Scheduling: task_queue_status, task_cancel.\n"
+            "   - Inspect worker nodes, daily free credit pools (50 pts/day), and pending task queues.\n\n"
+            "## Critical Operational Rules for AI Agents\n"
+            "- Asynchronous Task Polling: ALL generation tools (character_create, image_create, video_create) are asynchronous.\n"
+            "  They immediately return a `job_id`. You MUST continuously poll the corresponding `*_status` tool until `status` is 'completed' or 'failed'.\n"
+            "- English Prompts: Prompts for creating characters and images MUST be in English for optimal generation quality.\n"
+            "- Standard Workflow Sequence:\n"
+            "  Step 1: Ensure project context with `project_open` (or `project_create`).\n"
+            "  Step 2: (Optional) Create character with `character_create` and poll `character_status` until completed.\n"
+            "  Step 3: Generate video with `video_create` (optionally referencing character or image assets).\n"
+            "  Step 4: Poll `video_status` until completed; the returned `local_path` contains the downloaded video file path.\n"
+        )
         self.mcp = FastMCP(
             name="flow-mcp",
-            instructions="Google Agentspace Flow cluster-native media automation service.",
+            instructions=instructions.strip(),
         )
         self.settings = get_settings()
 

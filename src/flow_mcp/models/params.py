@@ -92,7 +92,7 @@ class CharacterCreateParams(BaseModel):
     prompt: str
     character_name: str
     model_name: str = "Nano banana pro"
-    full_body: bool = False
+    full_body: bool = True
     full_body_prompt: str = ""
     voice_name: str = ""
     voice_style: str = ""
