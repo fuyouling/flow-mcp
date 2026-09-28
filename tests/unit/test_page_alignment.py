@@ -104,3 +104,66 @@ def test_character_page_rename_and_locators():
     )
     mock_input.clear.assert_called_once()
     mock_input.input.assert_called_with("HeroBob")
+
+
+def test_character_page_first_character_skips_new_button():
+    mock_tab = MagicMock()
+    mock_tab.url = "http://test/project/1"
+    page = CharacterPage(mock_tab)
+
+    mock_char_btn = MagicMock()
+    mock_upload_btn = MagicMock()
+
+    def ele_side_effect(loc, **kwargs):
+        if 'mat-list-item' in loc:
+            return mock_char_btn
+        if 'span[text()="上传"]' in loc:
+            return mock_upload_btn
+        return None
+
+    mock_tab.ele.side_effect = ele_side_effect
+
+    is_first = page.navigate_to_characters("http://test/project/1")
+    assert is_first is True
+    assert page.is_first_character is True
+    mock_char_btn.click.assert_called_once()
+
+    # Now calling click_new_character should skip clicking new_btn
+    mock_new_btn = MagicMock()
+    mock_tab.ele.side_effect = lambda loc, **kwargs: mock_new_btn if '新角色' in loc else None
+    res = page.click_new_character()
+    assert res is True
+    mock_new_btn.click.assert_not_called()
+
+
+def test_character_page_subsequent_character_clicks_new_button():
+    mock_tab = MagicMock()
+    mock_tab.url = "http://test/project/1"
+    page = CharacterPage(mock_tab)
+
+    mock_char_btn = MagicMock()
+    mock_new_btn = MagicMock()
+    mock_editor = MagicMock()
+
+    def ele_side_effect(loc, **kwargs):
+        if 'mat-list-item' in loc:
+            return mock_char_btn
+        if 'span[text()="上传"]' in loc:
+            return None  # No upload button -> already has characters
+        if '新角色' in loc:
+            return mock_new_btn
+        if 'ProseMirror' in loc:
+            return mock_editor
+        return None
+
+    mock_tab.ele.side_effect = ele_side_effect
+
+    is_first = page.navigate_to_characters("http://test/project/1")
+    assert is_first is False
+    assert page.is_first_character is False
+    mock_char_btn.click.assert_called_once()
+
+    res = page.click_new_character()
+    assert res is True
+    mock_new_btn.click.assert_called_once()
+

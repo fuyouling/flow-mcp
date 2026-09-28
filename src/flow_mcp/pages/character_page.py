@@ -17,8 +17,12 @@ class CharacterPage(BasePage):
     Page Object Model for Character Creation and management in Google Flow.
     """
 
-    def navigate_to_characters(self, project_url: str) -> None:
-        """Navigate to project characters tab."""
+    def __init__(self, tab: Any):
+        super().__init__(tab)
+        self.is_first_character: bool = False
+
+    def navigate_to_characters(self, project_url: str) -> bool:
+        """Navigate to project characters tab and check if it's the project's first character."""
         logger.info(f"Navigating to characters tab at {project_url}...")
         if self.tab.url != project_url:
             self.tab.get(project_url)
@@ -26,18 +30,40 @@ class CharacterPage(BasePage):
             
         self.check_and_handle_refresh_prompt()
 
-        char_btn = self.tab.ele(
-            'xpath://mat-list-item[.//span[contains(text(), "角色") or contains(text(), "Character")]]',
-            timeout=3,
-        )
+        char_btn = self.tab.ele('xpath://mat-list-item//span[text()="角色"]', timeout=3)
+        if not char_btn:
+            char_btn = self.tab.ele(
+                'xpath://mat-list-item[.//span[contains(text(), "角色") or contains(text(), "Character")]]',
+                timeout=2,
+            )
         if char_btn:
             char_btn.click()
             time.sleep(2)
         else:
             logger.warning("Character button not found in sidebar.")
 
+        # 判断是否可以找到按钮 xpath 定位 //span[text()="上传"]
+        # 如果有说明是该项目第一个角色，无需点击按钮 新角色
+        upload_btn = self.tab.ele('xpath://span[text()="上传"]', timeout=2)
+        if upload_btn:
+            logger.info("Found Upload button (//span[text()='上传']), indicating this is the first character in the project.")
+            self.is_first_character = True
+        else:
+            self.is_first_character = False
+
+        return self.is_first_character
+
     def click_new_character(self) -> bool:
-        """Click 'New Character' button."""
+        """Click 'New Character' button if not already on the first character page."""
+        if getattr(self, "is_first_character", False):
+            logger.info("Project has no existing characters (first character); skipping 'New Character' button click and proceeding directly.")
+            return True
+
+        if self.tab.ele('xpath://span[text()="上传"]', timeout=1):
+            logger.info("Found Upload button (//span[text()='上传']); skipping 'New Character' button click and proceeding directly.")
+            self.is_first_character = True
+            return True
+
         logger.info("Clicking 'New Character' button...")
         new_btn = self.tab.ele(
             'xpath://button[contains(., "新角色") or contains(., "新建角色") or contains(., "创建角色") or contains(., "New Character")]',
@@ -246,7 +272,10 @@ class CharacterPage(BasePage):
     def rename_character(self, name: str) -> bool:
         """Rename character in character editor."""
         logger.info(f"Renaming character to '{name}'...")
-        name_input = self.tab.ele('xpath://input[@placeholder="角色名称"]', timeout=3)
+        name_input = self.tab.ele(
+            'xpath://input[@placeholder="角色名称" or @aria-label="角色名称" or contains(@placeholder, "角色")]',
+            timeout=3,
+        )
         if not name_input:
             logger.warning("Character name input not found.")
             return False
