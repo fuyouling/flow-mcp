@@ -261,7 +261,18 @@ class ImagePage(BasePage):
         while time.time() - start_time < timeout:
             loading_ele = self.tab.ele(loading_xpath, timeout=0.5)
             if not loading_ele:
-                # Generation finished
+                # Generation finished — check for error overlay before proceeding
+                error_title_ele = self.tab.ele('xpath://div[@class="error-title"]', timeout=0.5)
+                if error_title_ele:
+                    error_msg_ele = self.tab.ele('xpath://span[@class="error-message-text"]', timeout=0.5)
+                    error_msg = error_msg_ele.text.strip() if error_msg_ele and error_msg_ele.text else "Unknown generation error"
+                    logger.error(f"Image generation error detected: {error_msg}")
+                    if progress_callback:
+                        try:
+                            progress_callback(-1, f"[ERROR] {error_msg}")
+                        except Exception as ex:
+                            logger.debug(f"Progress callback exception: {ex}")
+                    raise RuntimeError(f"Image generation failed: {error_msg}")
                 break
             text = loading_ele.text or ""
             m = re.search(r"(\d{1,3})", text)
