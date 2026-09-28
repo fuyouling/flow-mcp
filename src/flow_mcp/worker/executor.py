@@ -54,9 +54,12 @@ class WorkerExecutor:
         tab = browser.latest_tab
         # pyright complains about MixTab | str, we know it's MixTab here or we cast it
         home = HomePage(tab) # type: ignore
-        home.open()
-
-        projects = home.get_projects()
+        
+        def _get_projects():
+            home.open()
+            return home.get_projects()
+            
+        projects = await asyncio.to_thread(_get_projects)
         if project_alias in projects:
             local_uuid = projects[project_alias]["local_uuid"]
             self.project_mappings[project_alias] = local_uuid
@@ -64,12 +67,18 @@ class WorkerExecutor:
 
         # Create project if not exists
         logger.info(f"Worker creating new project '{project_alias}'...")
-        new_uuid = home.create_project()
+        def _create_project():
+            return home.create_project()
+            
+        new_uuid = await asyncio.to_thread(_create_project)
         
         # Retry renaming up to 3 times
         for attempt in range(3):
-            home.open()
-            if home.rename_project(new_title=project_alias, project_uuid=new_uuid):
+            def _rename():
+                home.open()
+                return home.rename_project(new_title=project_alias, project_uuid=new_uuid)
+                
+            if await asyncio.to_thread(_rename):
                 break
             logger.warning(f"Project card not found yet (attempt {attempt+1}/3), retrying in 3s...")
             await asyncio.sleep(3)
