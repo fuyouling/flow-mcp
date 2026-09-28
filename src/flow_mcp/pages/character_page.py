@@ -276,6 +276,19 @@ class CharacterPage(BasePage):
                 self.click_btn(add_btn, name="'添加到角色'按钮", by_js=True)
                 time.sleep(1)
 
+        # Ensure modal dialog is closed
+        try:
+            close_btn = self.find_button('xpath://button[@aria-label="关闭"]', name="关闭声音面板按钮", timeout=1, silent_fail=True)
+            if close_btn:
+                self.click_btn(close_btn, name="关闭声音面板按钮")
+                time.sleep(0.5)
+            elif self.tab.ele(".cdk-overlay-backdrop", timeout=0.5):
+                self.tab.run_cdp("Input.dispatchKeyEvent", type="rawKeyDown", windowsVirtualKeyCode=27)
+                self.tab.run_cdp("Input.dispatchKeyEvent", type="keyUp", windowsVirtualKeyCode=27)
+                time.sleep(0.5)
+        except Exception as ex:
+            logger.debug(f"Modal cleanup check: {ex}")
+
         if voice_style:
             style_input = self.find_input('css:textarea[placeholder*="口音"], textarea[placeholder*="accent"]', name="声音风格输入框", timeout=1)
             if style_input:
@@ -288,6 +301,15 @@ class CharacterPage(BasePage):
     def rename_character(self, name: str) -> bool:
         """Rename character in character editor."""
         logger.info(f"Renaming character to '{name}'...")
+        if hasattr(self.tab, "ele"):
+            try:
+                if self.tab.ele(".cdk-overlay-backdrop", timeout=0.5):
+                    self.tab.run_cdp("Input.dispatchKeyEvent", type="rawKeyDown", windowsVirtualKeyCode=27)
+                    self.tab.run_cdp("Input.dispatchKeyEvent", type="keyUp", windowsVirtualKeyCode=27)
+                    time.sleep(0.5)
+            except Exception:
+                pass
+
         name_input = self.find_input(
             'xpath://input[@placeholder="角色名称" or @aria-label="角色名称" or contains(@placeholder, "角色")]',
             name="角色名称输入框",
@@ -306,7 +328,53 @@ class CharacterPage(BasePage):
 
         self.click_btn(name_input, name="角色名称输入框")
         time.sleep(0.3)
-        self.input_text(name_input, name, name="角色名称输入框", clear=True)
+
+        if hasattr(name_input, "clear"):
+            try:
+                name_input.clear()
+            except Exception:
+                pass
+
+        self.input_text(name_input, name, name="角色名称输入框", clear=False)
+        time.sleep(0.2)
+
+        # Press Enter to commit rename (via CDP keystroke and JS event)
+        try:
+            self.tab.run_cdp(
+                "Input.dispatchKeyEvent",
+                type="rawKeyDown",
+                windowsVirtualKeyCode=13,
+                key="Enter",
+                code="Enter",
+                text="\r",
+                unmodifiedText="\r",
+            )
+            self.tab.run_cdp(
+                "Input.dispatchKeyEvent",
+                type="char",
+                windowsVirtualKeyCode=13,
+                key="Enter",
+                code="Enter",
+                text="\r",
+                unmodifiedText="\r",
+            )
+            self.tab.run_cdp(
+                "Input.dispatchKeyEvent",
+                type="keyUp",
+                windowsVirtualKeyCode=13,
+                key="Enter",
+                code="Enter",
+            )
+            time.sleep(0.3)
+        except Exception as e:
+            logger.debug(f"CDP Enter key dispatch note: {e}")
+
+        try:
+            if hasattr(name_input, "run_js"):
+                name_input.run_js("this.dispatchEvent(new Event('change', {bubbles: true})); this.blur();")
+        except Exception:
+            pass
+
         time.sleep(0.5)
         return True
 

@@ -137,8 +137,7 @@ class LocalExecutor:
             char_page.click_new_character()
 
             char_page.generate_portrait(params.prompt, params.model_name)
-            char_page.rename_character(params.character_name)
-            
+
             portrait_path = ""
             if params.download:
                 portrait_path = char_page.download_character_image(f"{params.character_name}_Portrait") or ""
@@ -152,8 +151,10 @@ class LocalExecutor:
                 if params.download:
                     fullbody_path = char_page.download_character_image(f"{params.character_name}_Fullbody") or ""
 
+            # 在所有生成与声音配置完成后统一修改角色名称，确保不会被弹窗或后续生成动作打断
+            char_page.rename_character(params.character_name)
             char_page.save_character()
-            
+
             return {
                 "character_name": params.character_name,
                 "portrait_path": portrait_path,
@@ -187,7 +188,7 @@ class LocalExecutor:
 
             char_page.rename_character(params.character_name)
             char_page.save_character()
-            
+
             return {
                 "character_name": params.character_name,
                 "portrait_path": str(Path(params.portrait_image_path).resolve()),
