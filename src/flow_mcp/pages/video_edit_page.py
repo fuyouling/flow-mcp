@@ -26,19 +26,18 @@ class VideoEditPage(BasePage):
     def rename(self, new_name: str) -> bool:
         """Rename the video media via CDP events."""
         logger.info(f"Renaming video media to '{new_name}' via CDP...")
-        rename_input = self.tab.ele("tag:input@@class=editable-text-input", timeout=5)
-        if not rename_input:
-            rename_input = self.tab.ele("css:input.editable-text-input", timeout=2)
+        rename_input = self.find_input(
+            ["tag:input@@class=editable-text-input", "css:input.editable-text-input"],
+            name="视频重命名输入框",
+            timeout=5,
+        )
 
         if not rename_input:
             logger.warning("Rename input field not found on video edit page.")
             return False
 
-        try:
-            rename_input.click()
-            time.sleep(0.3)
-        except Exception:
-            pass
+        self.click_btn(rename_input, name="视频重命名输入框")
+        time.sleep(0.3)
 
         try:
             # Select all (Ctrl+A)
@@ -52,7 +51,7 @@ class VideoEditPage(BasePage):
             time.sleep(0.1)
 
             # Input text
-            rename_input.input(new_name)
+            self.input_text(rename_input, new_name, name="视频重命名输入框", clear=False)
             time.sleep(0.2)
 
             # Enter
@@ -108,56 +107,45 @@ class VideoEditPage(BasePage):
         start_time = time.time()
 
         # 1. Click download button: //button[@aria-label="下载媒体内容"]
-        download_btn = self.tab.ele('xpath://button[@aria-label="下载媒体内容"]', timeout=5)
+        download_btn = self.find_button('xpath://button[@aria-label="下载媒体内容"]', name="'下载媒体内容'按钮", timeout=5)
         if not download_btn:
             logger.warning("Download button (//button[@aria-label='下载媒体内容']) not found on edit page!")
             return None
 
-        try:
-            download_btn.click()
-            time.sleep(1)
-        except Exception as e:
-            logger.warning(f"Failed to click download button: {e}")
-            try:
-                download_btn.click(by_js=True)
-                time.sleep(1)
-            except Exception as e2:
-                logger.error(f"Failed to click download button via JS: {e2}")
-                return None
+        self.click_btn(download_btn, name="'下载媒体内容'按钮")
+        time.sleep(1)
 
         # 2. Click resolution button: //span[text()="{resolution}"]
-        res_btn = self.tab.ele(f'xpath://span[text()="{resolution}"]', timeout=5)
-        
+        res_btn = self.find_button(
+            [
+                f'xpath://span[text()="{resolution}"]',
+                f'xpath://*[contains(normalize-space(text()), "{resolution}")]',
+                f'text:{resolution}',
+            ],
+            name=f"视频分辨率'{resolution}'选项按钮",
+            timeout=5,
+            silent_fail=True,
+        )
+
         if not res_btn:
-            # Maybe the first click didn't register (e.g., intercepted or event not ready). Try JS click.
             logger.info("Resolution button not found after 5s. Retrying download button click...")
-            download_btn.click(by_js=True)
+            self.click_btn(download_btn, name="'下载媒体内容'按钮(重试)", by_js=True)
             time.sleep(1)
-            res_btn = self.tab.ele(f'xpath://span[text()="{resolution}"]', timeout=3)
-            
-        if not res_btn:
-            # Fallback 1: Use contains and normalize-space
-            res_btn = self.tab.ele(f'xpath://*[contains(normalize-space(text()), "{resolution}")]', timeout=2)
-            
-        if not res_btn:
-            # Fallback 2: DrissionPage native text fuzzy search
-            res_btn = self.tab.ele(f'text:{resolution}', timeout=2)
+            res_btn = self.find_button(
+                [
+                    f'xpath://span[text()="{resolution}"]',
+                    f'xpath://*[contains(normalize-space(text()), "{resolution}")]',
+                    f'text:{resolution}',
+                ],
+                name=f"视频分辨率'{resolution}'选项按钮",
+                timeout=3,
+            )
 
         if not res_btn:
             logger.warning(f"Resolution button for '{resolution}' not found!")
             return None
 
-        try:
-            res_btn.click()
-            logger.info(f"Clicked resolution option: {resolution}")
-        except Exception as e:
-            logger.warning(f"Failed to click resolution button: {e}")
-            try:
-                res_btn.click(by_js=True)
-                logger.info(f"Clicked resolution option via JS: {resolution}")
-            except Exception as e2:
-                logger.error(f"Failed to click resolution button via JS: {e2}")
-                return None
+        self.click_btn(res_btn, name=f"视频分辨率'{resolution}'选项按钮")
 
         # 3. Wait for file download to complete
         logger.info(f"Waiting up to {timeout}s for video file starting with '{expected_prefix}' in {download_dir}...")
@@ -203,12 +191,12 @@ class VideoEditPage(BasePage):
         logger.warning(f"Video download timed out after {timeout}s waiting for file with prefix '{expected_prefix}'")
         return None
 
-    def save_and_close(self):
+    def save_and_close(self) -> None:
         """Click the Done/Save button to close the edit view."""
         logger.info("Attempting to click Done/Save button")
-        done_btn = self.tab.ele('xpath://button[@aria-label="完成场景编辑"]', timeout=5)
+        done_btn = self.find_button('xpath://button[@aria-label="完成场景编辑"]', name="'完成场景编辑'按钮", timeout=5)
         if done_btn:
-            done_btn.click()
+            self.click_btn(done_btn, name="'完成场景编辑'按钮")
             time.sleep(1)
         else:
             logger.warning("Done/Save button not found.")

@@ -19,13 +19,15 @@ class HomePage(BasePage):
     def dismiss_modals(self) -> None:
         """Dismiss common promotional modals or cookie banners."""
         try:
-            btn = self.tab.ele(
+            btn = self.find_button(
                 'xpath://button[contains(., "开始使用") or contains(., "Get started") or contains(., "Got it") or contains(., "Close") or contains(., "关闭")]',
+                name="推广弹窗/模态关闭按钮",
                 timeout=2,
+                silent_fail=True,
             )
             if btn and btn.is_displayed:
                 logger.info("Dismissing promotional banner/modal...")
-                btn.click()
+                self.click_btn(btn, name="推广弹窗/模态关闭按钮")
                 time.sleep(0.5)
         except Exception as e:
             logger.debug(f"Modal dismissal check: {e}")
@@ -34,7 +36,7 @@ class HomePage(BasePage):
         """Open Flow home page and wait for project cards or new button."""
         logger.info(f"Opening Flow Home Page: {self.URL}")
         self.tab.get(self.URL)
-        self.tab.ele("css:flow-project-card, button.new-project-button", timeout=15)
+        self.find_element("css:flow-project-card, button.new-project-button", name="项目卡片或新建按钮", timeout=15)
         self.dismiss_modals()
         logger.info("Flow Home Page loaded successfully.")
 
@@ -56,7 +58,7 @@ class HomePage(BasePage):
             local_uuid = href.split("/")[-1] if href else ""
 
             full_text = title_div.text
-            btn_ele = title_div.ele("css:button", timeout=0)
+            btn_ele = self.find_button("css:button", name="卡片菜单按钮", timeout=0, scope=title_div, silent_fail=True)
             btn_text = btn_ele.text if btn_ele else ""
 
             title = full_text.replace(btn_text, "").strip() if btn_text else full_text.strip()
@@ -74,14 +76,16 @@ class HomePage(BasePage):
     def create_project(self) -> str:
         """Click 'New project' button, wait for navigation, return new project UUID."""
         logger.info("Creating new project via home page button...")
-        new_btn = self.tab.ele("css:button.new-project-button") or self.tab.ele(
-            'xpath://button[contains(., "新建项目") or contains(., "New project")]', timeout=3
+        new_btn = self.find_button(
+            ['css:button.new-project-button', 'xpath://button[contains(., "新建项目") or contains(., "New project")]'],
+            name="'新建项目'按钮",
+            timeout=3,
         )
         if not new_btn:
             raise RuntimeError("Could not locate 'New Project' button on Flow home page.")
 
         old_url = self.tab.url or ""
-        new_btn.click()
+        self.click_btn(new_btn, name="'新建项目'按钮")
 
         start_time = time.time()
         timeout = 20
@@ -125,19 +129,19 @@ class HomePage(BasePage):
             return False
 
         title_div = target_card.ele("css:div.project-title-label")
-        edit_btn = title_div.ele("css:button") if title_div else None
+        edit_btn = self.find_button("css:button", name="重命名编辑按钮", timeout=2, scope=title_div)
         if not edit_btn:
             logger.error("Rename edit button not found in card.")
             return False
 
-        edit_btn.click()
-        input_ele = self.tab.ele("css:input.title-input", timeout=5)
+        self.click_btn(edit_btn, name="重命名编辑按钮")
+        input_ele = self.find_input("css:input.title-input", name="项目名称输入框", timeout=5)
         if not input_ele:
             logger.error("Rename input box did not appear.")
             return False
 
         input_ele.run_js("this.value = ''; this.dispatchEvent(new Event('input', {bubbles: true}));")
-        input_ele.input(new_title + "\n")
+        self.input_text(input_ele, new_title + "\n", name="项目名称输入框", clear=False)
         is_deleted = self.tab.wait.ele_deleted(input_ele, timeout=5)
         if is_deleted:
             logger.info(f"Project renamed successfully to '{new_title}'")
@@ -148,17 +152,19 @@ class HomePage(BasePage):
         """Fetch available credits count from user account panel."""
         panel_opened = False
         try:
-            account_btn = self.tab.ele(
-                'xpath://div[@aria-label="账号详情" or @aria-label="Account details"]', timeout=5
+            account_btn = self.find_button(
+                'xpath://div[@aria-label="账号详情" or @aria-label="Account details"]',
+                name="'账号详情'按钮",
+                timeout=5,
             )
             if not account_btn:
                 logger.warning("Account details button not found.")
                 return None
-            account_btn.click()
+            self.click_btn(account_btn, name="'账号详情'按钮")
             panel_opened = True
             time.sleep(0.8)
 
-            credits_ele = self.tab.ele('xpath://span[contains(@class, "credits-count")]', timeout=5)
+            credits_ele = self.find_element('xpath://span[contains(@class, "credits-count")]', name="积分余额元素", timeout=5)
             if not credits_ele:
                 logger.warning("Credits count element not found.")
                 return None
@@ -175,12 +181,14 @@ class HomePage(BasePage):
         finally:
             if panel_opened:
                 try:
-                    close_btn = self.tab.ele(
+                    close_btn = self.find_button(
                         'xpath://button[@aria-label="关闭账号面板" or @aria-label="Close account panel"]',
+                        name="'关闭账号面板'按钮",
                         timeout=3,
+                        silent_fail=True,
                     )
                     if close_btn:
-                        close_btn.click()
+                        self.click_btn(close_btn, name="'关闭账号面板'按钮")
                 except Exception:
                     pass
 
@@ -188,16 +196,22 @@ class HomePage(BasePage):
         """Fetch current logged-in Google account email from UI."""
         panel_opened = False
         try:
-            account_btn = self.tab.ele(
-                'xpath://div[@aria-label="账号详情" or @aria-label="Account details"]', timeout=5
+            account_btn = self.find_button(
+                'xpath://div[@aria-label="账号详情" or @aria-label="Account details"]',
+                name="'账号详情'按钮",
+                timeout=5,
             )
             if not account_btn:
                 return None
-            account_btn.click()
+            self.click_btn(account_btn, name="'账号详情'按钮")
             panel_opened = True
             time.sleep(0.8)
 
-            email_ele = self.tab.ele('xpath://div[contains(@class, "account-email") or contains(text(), "@")]', timeout=3)
+            email_ele = self.find_element(
+                'xpath://div[contains(@class, "account-email") or contains(text(), "@")]',
+                name="账户邮箱元素",
+                timeout=3,
+            )
             if email_ele:
                 match = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", email_ele.text or "")
                 if match:
@@ -208,11 +222,13 @@ class HomePage(BasePage):
         finally:
             if panel_opened:
                 try:
-                    close_btn = self.tab.ele(
+                    close_btn = self.find_button(
                         'xpath://button[@aria-label="关闭账号面板" or @aria-label="Close account panel"]',
+                        name="'关闭账号面板'按钮",
                         timeout=3,
+                        silent_fail=True,
                     )
                     if close_btn:
-                        close_btn.click()
+                        self.click_btn(close_btn, name="'关闭账号面板'按钮")
                 except Exception:
                     pass

@@ -27,51 +27,56 @@ class ImagePage(BasePage):
         time.sleep(2)
 
         # 1. Open settings panel
-        settings_btn = self.tab.ele("tag:button@@aria-label=设置触发器", timeout=2)
-        if not settings_btn:
-            s_candidates = self.tab.eles("tag:button@@text():🍌")
-            if s_candidates:
-                settings_btn = s_candidates[-1]
+        settings_btn = self.find_button(
+            ["tag:button@@aria-label=设置触发器", "tag:button@@text():🍌"],
+            name="'设置触发器'按钮",
+            timeout=2,
+        )
 
         if settings_btn:
-            settings_btn.click()
+            self.click_btn(settings_btn, name="'设置触发器'按钮")
             time.sleep(1)
 
         # 2. Switch to image tab
-        img_tab = self.tab.ele('xpath://span[text()="图片" and @class="toggle-text"]', timeout=2)
+        img_tab = self.find_button(
+            ['xpath://span[text()="图片" and @class="toggle-text"]', "tag:button@@text()=图片"],
+            name="'图片'Tab切换按钮",
+            timeout=2,
+            silent_fail=True,
+        )
         if not img_tab:
-            s_btn = self.tab.eles("tag:button@@text():🍌")
+            s_btn = self.find_button("tag:button@@text():🍌", name="'🍌'备用设置按钮", timeout=1, silent_fail=True)
             if s_btn:
-                s_btn[-1].click()
+                self.click_btn(s_btn, name="'🍌'备用设置按钮")
                 time.sleep(1)
-                img_tab = self.tab.ele("tag:button@@text()=图片", timeout=2)
+                img_tab = self.find_button("tag:button@@text()=图片", name="'图片'Tab切换按钮", timeout=2)
 
         if img_tab:
-            img_tab.click()
+            self.click_btn(img_tab, name="'图片'Tab切换按钮")
             time.sleep(0.5)
 
         # 3. Aspect ratio
-        ratio_btn = self.tab.ele(f"tag:button@@text():{aspect_ratio}", timeout=1)
+        ratio_btn = self.find_button(f"tag:button@@text():{aspect_ratio}", name=f"画幅比例'{aspect_ratio}'按钮", timeout=1)
         if ratio_btn:
-            ratio_btn.click()
+            self.click_btn(ratio_btn, name=f"画幅比例'{aspect_ratio}'按钮")
             time.sleep(0.5)
 
         # 4. Model dropdown
-        dropdown = self.tab.ele("tag:button@@text():arrow_drop_down", timeout=1)
+        dropdown = self.find_button("tag:button@@text():arrow_drop_down", name="模型选择下拉按钮", timeout=1)
         if dropdown:
-            dropdown.click()
+            self.click_btn(dropdown, name="模型选择下拉按钮")
             time.sleep(0.5)
-            pro_options = self.tab.eles(f"tag:button@@text():{model_name}")
+            pro_options = self.find_buttons(f"tag:button@@text():{model_name}", name=f"模型'{model_name}'选项列表", timeout=1)
             for opt in pro_options:
                 if "arrow_drop_down" not in (opt.text or ""):
-                    opt.click()
+                    self.click_btn(opt, name=f"模型选项'{model_name}'")
                     time.sleep(0.5)
                     break
 
         # 5. Quantity
-        qty_btn = self.tab.ele(f"tag:button@@text()={quantity}", timeout=1)
+        qty_btn = self.find_button(f"tag:button@@text()={quantity}", name=f"生成数量'{quantity}'按钮", timeout=1)
         if qty_btn:
-            qty_btn.click()
+            self.click_btn(qty_btn, name=f"生成数量'{quantity}'按钮")
             time.sleep(0.5)
 
         # 6. Close settings panel via ESC
@@ -88,27 +93,30 @@ class ImagePage(BasePage):
         for asset in assets:
             if not asset.strip():
                 continue
-            add_btn = self.tab.ele('xpath://button[@aria-label="在提示框中添加素材"]', timeout=2) or self.tab.ele(
-                "@@aria-label=在提示框中添加素材", timeout=2
+            add_btn = self.find_button(
+                ['xpath://button[@aria-label="在提示框中添加素材"]', "@@aria-label=在提示框中添加素材"],
+                name="'在提示框中添加素材'按钮",
+                timeout=2,
             )
             if add_btn:
-                add_btn.click()
-                logger.info("Clicked '在提示框中添加素材' button")
+                self.click_btn(add_btn, name="'在提示框中添加素材'按钮")
                 time.sleep(1)
             else:
                 logger.warning(f"'添加素材' button not found, skipping asset: {asset}")
                 continue
 
-            search_input = self.tab.ele('xpath://input[@class="search-input" and @placeholder="搜索资源"]', timeout=2)
+            search_input = self.find_input(
+                'xpath://input[@class="search-input" and @placeholder="搜索资源"]',
+                name="素材搜索输入框",
+                timeout=2,
+            )
             if search_input:
-                search_input.clear()
-                search_input.input(asset.strip())
+                self.input_text(search_input, asset.strip(), name="素材搜索输入框", clear=True)
                 logger.info(f"Searching for asset: {asset.strip()!r}")
                 time.sleep(1.5)
-                add_prompt_btn = self.tab.ele("tag:button@@text():添加到提示", timeout=2)
+                add_prompt_btn = self.find_button("tag:button@@text():添加到提示", name="'添加到提示'按钮", timeout=2)
                 if add_prompt_btn:
-                    add_prompt_btn.click()
-                    logger.info(f"Clicked '添加到提示' for asset: {asset.strip()!r}")
+                    self.click_btn(add_prompt_btn, name="'添加到提示'按钮")
                     time.sleep(1)
                 else:
                     logger.warning(f"Asset result or add button not found for: {asset.strip()!r}")
@@ -125,16 +133,21 @@ class ImagePage(BasePage):
             self.tab.run_cdp("Input.dispatchKeyEvent", type="keyUp", windowsVirtualKeyCode=27)
             time.sleep(0.5)
 
-        editor = self.tab.ele(
-            'xpath://flow-rich-text-editor[@class="prompt-input"]//div[@contenteditable="true"]',
+        editor = self.find_element(
+            [
+                'xpath://flow-rich-text-editor[@class="prompt-input"]//div[@contenteditable="true"]',
+                'xpath://flow-rich-text-editor[@class="prompt-input"]',
+            ],
+            name="图片提示词编辑器",
             timeout=3,
         )
-        if not editor:
-            editor = self.tab.ele('xpath://flow-rich-text-editor[@class="prompt-input"]', timeout=2)
 
         if editor:
-            editor.click()
+            self.click_btn(editor, name="图片提示词编辑器")
             time.sleep(0.3)
+
+            start_time = time.time()
+            preview = (prompt[:30] + "...") if len(prompt) > 30 else prompt
 
             # Strategy 1: CDP Input.insertText
             try:
@@ -145,7 +158,8 @@ class ImagePage(BasePage):
                 )
                 if prompt.strip() in (pm_text or "").strip():
                     prompt_entered = True
-                    logger.info("Prompt entered via CDP Input.insertText and verified")
+                    elapsed = time.time() - start_time
+                    logger.info(f"[{self._op_time()} | 耗时: {elapsed:.2f}s] 输入图片提示词成功 (CDP方式, 预览: '{preview}')")
                 else:
                     logger.warning(f"CDP Input.insertText executed but text not verified (got {pm_text!r}), trying JS clipboard fallback")
             except Exception as e:
@@ -170,7 +184,7 @@ class ImagePage(BasePage):
                         })(arguments[0]);
                     """, prompt)
                     time.sleep(0.3)
-                    editor.click()
+                    self.click_btn(editor, name="图片提示词编辑器(粘贴重试)")
                     time.sleep(0.2)
                     self.tab.run_cdp("Input.dispatchKeyEvent", type="keyDown", windowsVirtualKeyCode=86, modifiers=2)
                     self.tab.run_cdp("Input.dispatchKeyEvent", type="keyUp", windowsVirtualKeyCode=86, modifiers=2)
@@ -180,7 +194,8 @@ class ImagePage(BasePage):
                     )
                     if prompt.strip() in (pm_text or "").strip():
                         prompt_entered = True
-                        logger.info("Prompt entered via JS clipboard + CDP Ctrl+V and verified")
+                        elapsed = time.time() - start_time
+                        logger.info(f"[{self._op_time()} | 耗时: {elapsed:.2f}s] 输入图片提示词成功 (剪贴板方式, 预览: '{preview}')")
                 except Exception as e:
                     logger.warning(f"Clipboard paste fallback failed: {e!r}")
 
@@ -207,7 +222,7 @@ class ImagePage(BasePage):
         if self.tab.url != project_url:
             self.tab.get(project_url)
             time.sleep(3)
-            
+
         self.check_and_handle_refresh_prompt()
 
         self.apply_settings(aspect_ratio, model_name, quantity)
@@ -219,11 +234,11 @@ class ImagePage(BasePage):
         time.sleep(0.5)
 
         # Click submit button
-        submit_btn = self.tab.ele('xpath://button[@type="submit"]', timeout=5)
+        submit_btn = self.find_button('xpath://button[@type="submit"]', name="生成图片提交按钮", timeout=5)
         if not submit_btn or submit_btn.attr("disabled"):
             raise RuntimeError("Generate submit button not clickable.")
 
-        submit_btn.click()
+        self.click_btn(submit_btn, name="生成图片提交按钮")
         logger.info("Clicked generate button, waiting for generation to complete...")
 
         # Poll progress
@@ -255,22 +270,16 @@ class ImagePage(BasePage):
         time.sleep(1)
 
         # Click newest tile to open details
-        tile = self.tab.ele("xpath://flow-grid-tile-container[1]", timeout=10)
+        tile = self.find_element("xpath://flow-grid-tile-container[1]", name="新生成图片卡片", timeout=10)
         if not tile:
             raise RuntimeError("Generated image tile (//flow-grid-tile-container[1]) not found.")
 
-        try:
-            tile.click()
-        except Exception:
-            tile.click(by_js=True)
+        self.click_btn(tile, name="新生成图片卡片")
         time.sleep(1.5)
-        
+
         if self.tab.ele('xpath://span[text()="所有媒体"]', timeout=1):
             logger.warning("Still on project page after clicking tile, trying again...")
-            try:
-                tile.click(by_js=True)
-            except Exception:
-                pass
+            self.click_btn(tile, name="新生成图片卡片(重试)", by_js=True)
             time.sleep(1.5)
             if self.tab.ele('xpath://span[text()="所有媒体"]', timeout=1):
                 raise RuntimeError("Failed to enter details page after multiple click attempts.")
@@ -300,11 +309,16 @@ class ImagePage(BasePage):
             self.tab.get(project_url)
             time.sleep(3)
 
-        img_btn = self.tab.ele('xpath://mat-list-item//span[text()="图片"]', timeout=3)
-        if not img_btn:
-            img_btn = self.tab.ele('xpath://mat-list-item[.//span[contains(text(), "图片") or text()="Images"]]', timeout=1)
+        img_btn = self.find_button(
+            [
+                'xpath://mat-list-item//span[text()="图片"]',
+                'xpath://mat-list-item[.//span[contains(text(), "图片") or text()="Images"]]',
+            ],
+            name="侧边栏'图片'按钮",
+            timeout=3,
+        )
         if img_btn:
-            img_btn.click()
+            self.click_btn(img_btn, name="侧边栏'图片'按钮")
             time.sleep(2)
 
         tiles = self.tab.eles("xpath://flow-image-tile")
@@ -336,51 +350,52 @@ class ImagePage(BasePage):
             time.sleep(3)
 
         # Click add media button
-        add_btn = self.tab.ele('xpath://button[@mattooltip="添加媒体"]', timeout=5)
-        if not add_btn:
-            add_btn = self.tab.ele('xpath://button[contains(@mattooltip, "添加媒体") or contains(@aria-label, "添加媒体")]', timeout=2)
+        add_btn = self.find_button(
+            [
+                'xpath://button[@mattooltip="添加媒体"]',
+                'xpath://button[contains(@mattooltip, "添加媒体") or contains(@aria-label, "添加媒体")]',
+            ],
+            name="'添加媒体'按钮",
+            timeout=5,
+        )
         if not add_btn:
             raise RuntimeError("Add media button not found on project page.")
 
-        try:
-            add_btn.click()
-        except Exception:
-            add_btn.click(by_js=True)
+        self.click_btn(add_btn, name="'添加媒体'按钮")
         time.sleep(0.8)
 
         # Set upload files via CDP
         self.tab.set.upload_files(abs_path)
 
-        upload_btn = self.tab.ele('xpath://span[text()="上传"]', timeout=5)
-        if not upload_btn:
-            upload_btn = self.tab.ele('xpath://button[contains(., "上传")]', timeout=2)
+        upload_btn = self.find_button(
+            ['xpath://span[text()="上传"]', 'xpath://button[contains(., "上传")]'],
+            name="'上传'按钮",
+            timeout=5,
+        )
         if not upload_btn:
             raise RuntimeError("Upload button not found.")
 
-        try:
-            upload_btn.click()
-        except Exception:
-            upload_btn.click(by_js=True)
+        self.click_btn(upload_btn, name="'上传'按钮")
 
         # Wait for completion & handle agreement dialog
         start_time = time.time()
         uploaded_tile = None
         while time.time() - start_time < timeout:
-            agree_btn = self.tab.ele('xpath://span[text()="我同意，不再显示"]', timeout=0)
-            if not agree_btn:
-                agree_btn = self.tab.ele('xpath://button[contains(., "我同意") or .//span[contains(text(), "我同意")]]', timeout=0)
+            agree_btn = self.find_button(
+                ['xpath://span[text()="我同意，不再显示"]', 'xpath://button[contains(., "我同意") or .//span[contains(text(), "我同意")]]'],
+                name="'我同意，不再显示'按钮",
+                timeout=0,
+                silent_fail=True,
+            )
             if agree_btn:
-                try:
-                    agree_btn.click()
-                except Exception:
-                    agree_btn.click(by_js=True)
+                self.click_btn(agree_btn, name="'我同意，不再显示'按钮", by_js=True)
                 time.sleep(1)
 
             first_span = self.tab.ele("xpath:(//flow-grid-tile-container)[1]//span", timeout=0.5)
             if first_span:
                 span_text = first_span.text.strip()
                 if file_stem.lower() in span_text.lower():
-                    uploaded_tile = self.tab.ele("xpath:(//flow-grid-tile-container)[1]", timeout=1)
+                    uploaded_tile = self.find_element("xpath:(//flow-grid-tile-container)[1]", name="已上传图片卡片", timeout=1)
                     break
             time.sleep(1)
 
@@ -389,7 +404,7 @@ class ImagePage(BasePage):
 
         if target_name:
             try:
-                uploaded_tile.click()
+                self.click_btn(uploaded_tile, name="已上传图片卡片")
                 time.sleep(1)
                 edit_page = ImageEditPage(self.tab)
                 edit_page.rename(target_name)

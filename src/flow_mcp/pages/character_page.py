@@ -27,24 +27,26 @@ class CharacterPage(BasePage):
         if self.tab.url != project_url:
             self.tab.get(project_url)
             time.sleep(3)
-            
+
         self.check_and_handle_refresh_prompt()
 
-        char_btn = self.tab.ele('xpath://mat-list-item//span[text()="角色"]', timeout=3)
-        if not char_btn:
-            char_btn = self.tab.ele(
+        char_btn = self.find_button(
+            [
+                'xpath://mat-list-item//span[text()="角色"]',
                 'xpath://mat-list-item[.//span[contains(text(), "角色") or contains(text(), "Character")]]',
-                timeout=2,
-            )
+            ],
+            name="侧边栏'角色'按钮",
+            timeout=3,
+        )
         if char_btn:
-            char_btn.click()
+            self.click_btn(char_btn, name="侧边栏'角色'按钮")
             time.sleep(2)
         else:
             logger.warning("Character button not found in sidebar.")
 
         # 判断是否可以找到按钮 xpath 定位 //span[text()="上传"]
         # 如果有说明是该项目第一个角色，无需点击按钮 新角色
-        upload_btn = self.tab.ele('xpath://span[text()="上传"]', timeout=2)
+        upload_btn = self.find_button('xpath://span[text()="上传"]', name="首角色'上传'按钮", timeout=2)
         if upload_btn:
             logger.info("Found Upload button (//span[text()='上传']), indicating this is the first character in the project.")
             self.is_first_character = True
@@ -59,48 +61,59 @@ class CharacterPage(BasePage):
             logger.info("Project has no existing characters (first character); skipping 'New Character' button click and proceeding directly.")
             return True
 
-        if self.tab.ele('xpath://span[text()="上传"]', timeout=1):
+        if self.find_button('xpath://span[text()="上传"]', name="首角色'上传'按钮(检查)", timeout=1, silent_fail=True):
             logger.info("Found Upload button (//span[text()='上传']); skipping 'New Character' button click and proceeding directly.")
             self.is_first_character = True
             return True
 
         logger.info("Clicking 'New Character' button...")
-        new_btn = self.tab.ele(
+        new_btn = self.find_button(
             'xpath://button[contains(., "新角色") or contains(., "新建角色") or contains(., "创建角色") or contains(., "New Character")]',
+            name="'新角色'按钮",
             timeout=3,
         )
         if new_btn:
-            new_btn.click()
+            self.click_btn(new_btn, name="'新角色'按钮")
             time.sleep(2.5)
             logger.info("Clicked New Character.")
         else:
             logger.warning("New Character button not found. Checking if editor is ready.")
 
         # Verify editor is ready
-        if not self.tab.ele("css:.ProseMirror", timeout=3) and not self.tab.ele("css:textarea", timeout=1):
+        editor = self.find_element(["css:.ProseMirror", "css:textarea"], name="角色编辑器输入框", timeout=3, silent_fail=True)
+        if not editor:
             logger.error("Editor not found after clicking New Character.")
             return False
         return True
 
     def _safe_input_prompt(self, editor: Any, prompt: str) -> None:
         """Input prompt text into character editor without triggering popup triggers."""
-        if getattr(editor, "tag", "").lower() == "textarea":
-            editor.run_js(
-                "this.value = arguments[0]; this.dispatchEvent(new Event('input', {bubbles: true}));",
-                prompt,
-            )
-        else:
-            js = """
-            const dataTransfer = new DataTransfer();
-            dataTransfer.setData('text/plain', arguments[0]);
-            const event = new ClipboardEvent('paste', {
-                clipboardData: dataTransfer,
-                bubbles: true,
-                cancelable: true
-            });
-            this.dispatchEvent(event);
-            """
-            editor.run_js(js, prompt)
+        start_time = time.time()
+        preview = (prompt[:30] + "...") if len(prompt) > 30 else prompt
+        try:
+            if getattr(editor, "tag", "").lower() == "textarea":
+                editor.run_js(
+                    "this.value = arguments[0]; this.dispatchEvent(new Event('input', {bubbles: true}));",
+                    prompt,
+                )
+            else:
+                js = """
+                const dataTransfer = new DataTransfer();
+                dataTransfer.setData('text/plain', arguments[0]);
+                const event = new ClipboardEvent('paste', {
+                    clipboardData: dataTransfer,
+                    bubbles: true,
+                    cancelable: true
+                });
+                this.dispatchEvent(event);
+                """
+                editor.run_js(js, prompt)
+            elapsed = time.time() - start_time
+            logger.info(f"[{self._op_time()} | 耗时: {elapsed:.2f}s] 输入角色提示词成功 (长度: {len(prompt)}, 预览: '{preview}')")
+        except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(f"[{self._op_time()} | 耗时: {elapsed:.2f}s] 输入角色提示词失败 - 错误: {e}")
+            raise
 
     def _wait_for_generation_complete(self, max_wait: int = 300) -> str:
         """Wait for character image generation to finish."""
@@ -111,13 +124,14 @@ class CharacterPage(BasePage):
         while time.time() - start_time < max_wait:
             err = self.tab.ele("css:.error-message", timeout=0)
             if err and ("失败" in err.text or "failed" in err.text.lower() or "error" in err.text.lower()):  # type: ignore[operator]
-                retry = self.tab.ele(
+                retry = self.find_button(
                     'xpath://button[contains(., "重试") or contains(., "Retry") or contains(., "重新生成")]',
+                    name="'重试'按钮",
                     timeout=0,
                 )
                 if retry:
                     logger.warning("Generation failed, clicking retry...")
-                    retry.click()
+                    self.click_btn(retry, name="'重试'按钮")
                     time.sleep(2)
                     continue
                 raise RuntimeError(f"Generation failed: {err.text}")
@@ -143,38 +157,42 @@ class CharacterPage(BasePage):
     def generate_portrait(self, prompt: str, model_name: str = "Nano banana pro") -> str:
         """Generate character portrait."""
         logger.info(f"Generating character portrait (model={model_name})...")
-        editor = self.tab.ele("css:.ProseMirror", timeout=3)
-        if not editor:
-            editor = self.tab.ele("css:textarea")
-
+        editor = self.find_element(["css:.ProseMirror", "css:textarea"], name="角色提示词输入框", timeout=3)
         if editor:
-            editor.click()
-            editor.clear()
+            self.click_btn(editor, name="角色提示词输入框")
+            if hasattr(editor, "clear"):
+                editor.clear()
             self._safe_input_prompt(editor, prompt)
             time.sleep(1)
 
         if model_name:
             logger.info(f"Selecting model: {model_name}")
-            model_btn = self.tab.ele('css:button.model-select-button, button[aria-label*="模型"], button[aria-label*="model"]', timeout=2)
+            model_btn = self.find_button(
+                'css:button.model-select-button, button[aria-label*="模型"], button[aria-label*="model"]',
+                name="模型选择按钮",
+                timeout=2,
+            )
             if model_btn:
-                model_btn.click()
+                self.click_btn(model_btn, name="模型选择按钮")
                 time.sleep(1)
                 lower_model = model_name.lower()
-                menu_items = self.tab.eles("css:.mat-mdc-menu-item, .mat-menu-item", timeout=2)
+                menu_items = self.find_buttons("css:.mat-mdc-menu-item, .mat-menu-item", name="模型菜单选项", timeout=2)
                 for item in menu_items:
                     if lower_model in (item.text or "").lower():
-                        item.click()
+                        self.click_btn(item, name=f"模型选项'{item.text.strip()}'")
                         time.sleep(1)
                         break
 
-        gen_btn = self.tab.ele('xpath://button[@type="submit"]', timeout=5)
-        if not gen_btn:
-            gen_btn = self.tab.ele('xpath://button[contains(., "生成") or contains(., "Generate")]', timeout=5)
+        gen_btn = self.find_button(
+            ['xpath://button[@type="submit"]', 'xpath://button[contains(., "生成") or contains(., "Generate")]'],
+            name="肖像'生成'按钮",
+            timeout=5,
+        )
 
         if gen_btn:
             if gen_btn.attr("disabled"):
                 logger.warning("Generate button is disabled, attempting to click anyway...")
-            gen_btn.click()
+            self.click_btn(gen_btn, name="肖像'生成'按钮")
             time.sleep(2)
         else:
             raise RuntimeError("Generate button not found.")
@@ -184,39 +202,37 @@ class CharacterPage(BasePage):
     def generate_fullbody(self, prompt: str = "", model_name: str = "Nano banana pro") -> str:
         """Generate full body character image."""
         logger.info("Generating fullbody image...")
-        fullbody_btn = self.tab.ele(
+        fullbody_btn = self.find_button(
             'xpath://button[contains(., "生成全身") or contains(., "全身") or contains(., "Full body")]',
+            name="'生成全身'按钮",
             timeout=3,
         )
         if not fullbody_btn:
             logger.warning("Generate Fullbody button not found.")
             return ""
 
-        try:
-            fullbody_btn.click(by_js=True)
-        except Exception as e:
-            logger.warning(f"JS click on fullbody button failed: {e}, attempting regular click...")
-            fullbody_btn.click()
+        self.click_btn(fullbody_btn, name="'生成全身'按钮", by_js=True)
         time.sleep(2)
 
         if prompt:
-            editor = self.tab.ele("css:.ProseMirror", timeout=2)
-            if not editor:
-                editor = self.tab.ele("css:textarea")
+            editor = self.find_element(["css:.ProseMirror", "css:textarea"], name="全身像提示词输入框", timeout=2)
             if editor:
-                editor.click()
-                editor.clear()
+                self.click_btn(editor, name="全身像提示词输入框")
+                if hasattr(editor, "clear"):
+                    editor.clear()
                 self._safe_input_prompt(editor, prompt)
                 time.sleep(1)
 
-        gen_btn = self.tab.ele('xpath://button[@type="submit"]', timeout=5)
-        if not gen_btn:
-            gen_btn = self.tab.ele('xpath://button[contains(., "生成") or contains(., "Generate")]', timeout=5)
+        gen_btn = self.find_button(
+            ['xpath://button[@type="submit"]', 'xpath://button[contains(., "生成") or contains(., "Generate")]'],
+            name="全身像'生成'按钮",
+            timeout=5,
+        )
 
         if gen_btn:
             if gen_btn.attr("disabled"):
                 logger.warning("Generate button is disabled, attempting to click anyway...")
-            gen_btn.click()
+            self.click_btn(gen_btn, name="全身像'生成'按钮")
             time.sleep(2)
         else:
             logger.warning("Generate button not found for fullbody.")
@@ -227,63 +243,70 @@ class CharacterPage(BasePage):
         """Configure voice for the character."""
         if not voice_name:
             return True
-            
+
         logger.info(f"Configuring voice: {voice_name}")
-        voice_btn = self.tab.ele('xpath://button[contains(., "选择") or contains(., "voice") or contains(@aria-label, "声音") or contains(@aria-label, "voice")]', timeout=3)
+        voice_btn = self.find_button(
+            'xpath://button[contains(., "选择") or contains(., "voice") or contains(@aria-label, "声音") or contains(@aria-label, "voice")]',
+            name="声音选择按钮",
+            timeout=3,
+        )
         if not voice_btn:
             logger.error("Could not find Voice button.")
             return False
-            
-        voice_btn.click()
-        import time
+
+        self.click_btn(voice_btn, name="声音选择按钮")
         time.sleep(1.5)
-        
-        search_input = self.tab.ele('css:input[placeholder*="搜"], input[placeholder*="Search"]', timeout=2)
+
+        search_input = self.find_input('css:input[placeholder*="搜"], input[placeholder*="Search"]', name="声音搜索输入框", timeout=2)
         if search_input:
-            search_input.input(voice_name)
+            self.input_text(search_input, voice_name, name="声音搜索输入框", clear=True)
             time.sleep(1)
-            
+
         # Check if the voice was found
         not_found = self.tab.ele('xpath://span[contains(text(),"未找到资源")]', timeout=1)
         if not_found:
             logger.warning(f"Voice '{voice_name}' not found.")
-            close_btn = self.tab.ele('xpath://button[@aria-label="关闭"]', timeout=2)
+            close_btn = self.find_button('xpath://button[@aria-label="关闭"]', name="关闭声音面板按钮", timeout=2)
             if close_btn:
-                close_btn.click()
+                self.click_btn(close_btn, name="关闭声音面板按钮")
                 time.sleep(1)
         else:
-            add_btn = self.tab.ele('xpath://span[contains(text(),"添加到角色")]', timeout=2)
+            add_btn = self.find_button('xpath://span[contains(text(),"添加到角色")]', name="'添加到角色'按钮", timeout=2)
             if add_btn:
-                try:
-                    add_btn.click()
-                except Exception:
-                    add_btn.click(by_js=True)
+                self.click_btn(add_btn, name="'添加到角色'按钮", by_js=True)
                 time.sleep(1)
-            
+
         if voice_style:
-            style_input = self.tab.ele('css:textarea[placeholder*="口音"], textarea[placeholder*="accent"]', timeout=1)
+            style_input = self.find_input('css:textarea[placeholder*="口音"], textarea[placeholder*="accent"]', name="声音风格输入框", timeout=1)
             if style_input:
-                style_input.input(voice_style)
+                self.input_text(style_input, voice_style, name="声音风格输入框")
                 time.sleep(0.5)
-                
+
         logger.info("Voice configured successfully.")
         return True
 
     def rename_character(self, name: str) -> bool:
         """Rename character in character editor."""
         logger.info(f"Renaming character to '{name}'...")
-        name_input = self.tab.ele(
+        name_input = self.find_input(
             'xpath://input[@placeholder="角色名称" or @aria-label="角色名称" or contains(@placeholder, "角色")]',
+            name="角色名称输入框",
             timeout=3,
+            silent_fail=True,
         )
+        if not name_input:
+            name_input = self.find_input(
+                'xpath://input[@class="editable-text-input"]',
+                name="角色名称输入框(备用)",
+                timeout=3,
+            )
         if not name_input:
             logger.warning("Character name input not found.")
             return False
 
-        name_input.click()
+        self.click_btn(name_input, name="角色名称输入框")
         time.sleep(0.3)
-        name_input.clear()
-        name_input.input(name)
+        self.input_text(name_input, name, name="角色名称输入框", clear=True)
         time.sleep(0.5)
         return True
 
@@ -296,30 +319,29 @@ class CharacterPage(BasePage):
         abs_path = str(path_obj.resolve())
         self.tab.set.upload_files(abs_path)
 
-        upload_btn = self.tab.ele('xpath://span[text()="上传"]', timeout=5)
-        if not upload_btn:
-            upload_btn = self.tab.ele('xpath://button[contains(., "上传")]', timeout=2)
+        upload_btn = self.find_button(
+            ['xpath://span[text()="上传"]', 'xpath://button[contains(., "上传")]'],
+            name="肖像'上传'按钮",
+            timeout=5,
+        )
         if not upload_btn:
             raise RuntimeError("Upload button not found.")
 
-        try:
-            upload_btn.click()
-        except Exception:
-            upload_btn.click(by_js=True)
+        self.click_btn(upload_btn, name="肖像'上传'按钮", by_js=True)
 
         start_time = time.time()
         while time.time() - start_time < timeout:
-            agree_btn = self.tab.ele('xpath://span[text()="我同意，不再显示"]', timeout=0)
-            if not agree_btn:
-                agree_btn = self.tab.ele('xpath://button[contains(., "我同意") or .//span[contains(text(), "我同意")]]', timeout=0)
+            agree_btn = self.find_button(
+                ['xpath://span[text()="我同意，不再显示"]', 'xpath://button[contains(., "我同意") or .//span[contains(text(), "我同意")]]'],
+                name="'我同意，不再显示'按钮",
+                timeout=0,
+                silent_fail=True,
+            )
             if agree_btn:
-                try:
-                    agree_btn.click()
-                except Exception:
-                    agree_btn.click(by_js=True)
+                self.click_btn(agree_btn, name="'我同意，不再显示'按钮", by_js=True)
                 time.sleep(1)
 
-            dl_btn = self.tab.ele('xpath://button[@aria-label="下载图片"]', timeout=1)
+            dl_btn = self.find_button('xpath://button[@aria-label="下载图片"]', name="'下载图片'按钮(验证肖像上传)", timeout=1, silent_fail=True)
             if dl_btn:
                 logger.info("Portrait upload completed successfully.")
                 return True
@@ -342,54 +364,52 @@ class CharacterPage(BasePage):
 
         # Step 5: Click Fullbody button/tab
         logger.info("Clicking Fullbody button/tab...")
-        fullbody_btn = self.tab.ele('xpath://button[contains(., "全身") or contains(., "full body")] | //span[contains(text(), "全身")]', timeout=5)
+        fullbody_btn = self.find_button(
+            'xpath://button[contains(., "全身") or contains(., "full body")] | //span[contains(text(), "全身")]',
+            name="全身像Tab/按钮",
+            timeout=5,
+        )
         if fullbody_btn:
-            try:
-                fullbody_btn.click(by_js=True)
-            except Exception as e:
-                logger.warning(f"JS click on fullbody button failed: {e}, attempting regular click...")
-                fullbody_btn.click()
+            self.click_btn(fullbody_btn, name="全身像Tab/按钮", by_js=True)
             time.sleep(1.5)
         else:
             logger.warning("Could not find Fullbody button/tab. Continuing to look for fullbody upload button...")
 
         # Count existing download buttons prior to fullbody upload
-        existing_dl_btns = self.tab.eles('xpath://button[@aria-label="下载图片"]')
+        existing_dl_btns = self.find_buttons('xpath://button[@aria-label="下载图片"]', name="全身像'下载图片'按钮列表", timeout=1)
         initial_dl_count = len(existing_dl_btns) if existing_dl_btns else 0
 
         # Set upload file via CDP interception
         self.tab.set.upload_files(abs_path)
 
         # Step 6: Locate and click Upload button in fullbody area
-        upload_btn = self.tab.ele('xpath://span[text()="上传"] | //span[contains(text(), "上传")]', timeout=5)
-        if not upload_btn:
-            upload_btn = self.tab.ele('xpath://button[contains(., "上传")]', timeout=2)
+        upload_btn = self.find_button(
+            ['xpath://span[text()="上传"] | //span[contains(text(), "上传")]', 'xpath://button[contains(., "上传")]'],
+            name="全身像'上传'按钮",
+            timeout=5,
+        )
         if not upload_btn:
             raise Exception("Could not find fullbody Upload button (//span[contains(text(), '上传')]).")
 
-        try:
-            upload_btn.click()
-        except Exception as e:
-            logger.warning(f"Direct click on fullbody upload button failed: {e}, attempting JS click...")
-            upload_btn.click(by_js=True)
+        self.click_btn(upload_btn, name="全身像'上传'按钮", by_js=True)
 
         logger.info(f"Waiting up to {timeout}s for fullbody upload to complete...")
         start_time = time.time()
         while time.time() - start_time < timeout:
             # Check for agreement popup
-            agree_btn = self.tab.ele('xpath://span[text()="我同意，不再显示"]', timeout=0)
-            if not agree_btn:
-                agree_btn = self.tab.ele('xpath://button[contains(., "我同意") or .//span[contains(text(), "我同意")]]', timeout=0)
+            agree_btn = self.find_button(
+                ['xpath://span[text()="我同意，不再显示"]', 'xpath://button[contains(., "我同意") or .//span[contains(text(), "我同意")]]'],
+                name="'我同意，不再显示'按钮",
+                timeout=0,
+                silent_fail=True,
+            )
             if agree_btn:
                 logger.info("Detected agreement dialog, clicking '我同意，不再显示'...")
-                try:
-                    agree_btn.click()
-                except Exception:
-                    agree_btn.click(by_js=True)
+                self.click_btn(agree_btn, name="'我同意，不再显示'按钮", by_js=True)
                 time.sleep(1)
 
             # Check if a new download button appeared, or if at least one exists
-            current_dl_btns = self.tab.eles('xpath://button[@aria-label="下载图片"]')
+            current_dl_btns = self.find_buttons('xpath://button[@aria-label="下载图片"]', name="当前'下载图片'按钮列表", timeout=1)
             current_dl_count = len(current_dl_btns) if current_dl_btns else 0
             if current_dl_count > initial_dl_count or (initial_dl_count == 0 and current_dl_count > 0):
                 logger.info("Fullbody upload completed successfully! Download button detected.")
@@ -409,20 +429,13 @@ class CharacterPage(BasePage):
         existing_files = set(download_dir.iterdir())
         start_time = time.time()
 
-        download_btn = self.tab.ele('xpath://button[@aria-label="下载图片"]', timeout=5)
+        download_btn = self.find_button('xpath://button[@aria-label="下载图片"]', name="'下载图片'按钮", timeout=5)
         if not download_btn:
             logger.warning("Download character image button (//button[@aria-label='下载图片']) not found.")
             return None
 
-        try:
-            download_btn.click()
-            time.sleep(1)
-        except Exception:
-            try:
-                download_btn.click(by_js=True)
-                time.sleep(1)
-            except Exception:
-                return None
+        self.click_btn(download_btn, name="'下载图片'按钮", by_js=True)
+        time.sleep(1)
 
         downloaded_file = None
         while time.time() - start_time < timeout:
@@ -466,9 +479,13 @@ class CharacterPage(BasePage):
 
     def save_character(self) -> bool:
         """Click Done/Save button for character."""
-        done_btn = self.tab.ele('xpath://button[contains(., "完成") or contains(., "Done") or contains(., "保存")]', timeout=3)
+        done_btn = self.find_button(
+            'xpath://button[contains(., "完成") or contains(., "Done") or contains(., "保存")]',
+            name="角色'完成/保存'按钮",
+            timeout=3,
+        )
         if done_btn:
-            done_btn.click()
+            self.click_btn(done_btn, name="角色'完成/保存'按钮")
             time.sleep(2)
             logger.info("Character saved successfully.")
             return True
@@ -480,11 +497,16 @@ class CharacterPage(BasePage):
             self.tab.get(project_url)
             time.sleep(3)
 
-        char_btn = self.tab.ele('xpath://mat-list-item//span[text()="角色"]', timeout=3)
-        if not char_btn:
-            char_btn = self.tab.ele('xpath://mat-list-item[.//span[contains(text(), "角色") or contains(text(), "Character")]]', timeout=1)
+        char_btn = self.find_button(
+            [
+                'xpath://mat-list-item//span[text()="角色"]',
+                'xpath://mat-list-item[.//span[contains(text(), "角色") or contains(text(), "Character")]]',
+            ],
+            name="侧边栏'角色'按钮",
+            timeout=3,
+        )
         if char_btn:
-            char_btn.click()
+            self.click_btn(char_btn, name="侧边栏'角色'按钮")
             time.sleep(2)
 
         self.tab.ele('xpath://div[contains(@class, "character-tile-container")]', timeout=3)
