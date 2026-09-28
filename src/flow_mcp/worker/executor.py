@@ -41,6 +41,7 @@ class WorkerExecutor:
         self.master_http_url = (master_http_url or settings.master_http_url).rstrip("/")
         self.on_project_mapping_added = on_project_mapping_added
         self.project_mappings: dict[str, str] = {}
+        self.cached_assets: set[str] = set()
 
     async def ensure_project_url(self, project_alias: str) -> str:
         """Resolve project alias to local Flow project URL."""
