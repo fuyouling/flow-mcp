@@ -22,29 +22,50 @@ class AssetSyncer:
         self.master_http_url = (master_http_url or settings.master_http_url).rstrip("/")
         self.cache_dir = Path(cache_dir or (Path(settings.chrome_download_dir) / "asset_cache"))
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        # Track which exact file versions have been synced to which project
+        self.synced_project_files: set[tuple[str, str]] = set()
 
-    async def download_from_hub(self, asset_name: str) -> Path:
-        """Download asset from Master AssetHub if not already in local cache."""
-        # Check if already cached
-        matching = list(self.cache_dir.glob(f"{asset_name}.*")) + list(self.cache_dir.glob(asset_name))
-        if matching:
-            return matching[0]
-
+    async def download_from_hub(self, asset_name: str) -> Path | None:
+        """Download asset from Master AssetHub, checking for the latest version."""
         url = f"{self.master_http_url}/assets/{asset_name}"
-        logger.info(f"Downloading asset '{asset_name}' from Master AssetHub: {url}")
+        logger.info(f"Checking asset '{asset_name}' against Master AssetHub: {url}")
 
         async with httpx.AsyncClient(timeout=60.0) as client:
+            actual_filename = None
+            # 1. Try HEAD request to find the actual timestamped filename from Master
+            try:
+                head_resp = await client.head(url)
+                if head_resp.status_code == 200:
+                    content_disp = head_resp.headers.get("content-disposition", "")
+                    if "filename=" in content_disp:
+                        actual_filename = content_disp.split("filename=")[-1].strip('"\'')
+                        dest = self.cache_dir / actual_filename
+                        if dest.exists():
+                            logger.debug(f"Asset '{asset_name}' is already up-to-date in cache: {dest.name}")
+                            return dest
+            except Exception as e:
+                logger.warning(f"Failed to check HEAD for asset '{asset_name}': {e}. Falling back to GET.")
+
+            # 2. If it's not in cache or HEAD failed, do full GET request
             resp = await client.get(url)
             if resp.status_code != 200:
-                raise RuntimeError(f"Failed to download asset {asset_name} from Master: HTTP {resp.status_code}")
+                # If GET fails (e.g. 404), it might be a character logic name. Fallback to old cache just in case.
+                matching = list(self.cache_dir.glob(f"{asset_name}.*")) + list(self.cache_dir.glob(asset_name))
+                if matching:
+                    logger.warning(f"Master returned {resp.status_code}. Falling back to old local cache for '{asset_name}'.")
+                    return matching[0]
+                logger.warning(f"Failed to download asset {asset_name} from Master: HTTP {resp.status_code}")
+                return None
 
-            # Guess filename or default
-            ext = ".bin"
-            content_disp = resp.headers.get("content-disposition", "")
-            if "filename=" in content_disp:
-                ext = Path(content_disp.split("filename=")[-1].strip('"\'')).suffix or ext
+            if not actual_filename:
+                ext = ".bin"
+                content_disp = resp.headers.get("content-disposition", "")
+                if "filename=" in content_disp:
+                    actual_filename = content_disp.split("filename=")[-1].strip('"\'')
+                else:
+                    actual_filename = f"{asset_name}{ext}"
 
-            dest = self.cache_dir / f"{asset_name}{ext}"
+            dest = self.cache_dir / actual_filename
             with dest.open("wb") as f:
                 f.write(resp.content)
 
@@ -61,7 +82,15 @@ class AssetSyncer:
         """Ensure asset is uploaded to the specified Flow project."""
         try:
             local_file = await self.download_from_hub(asset_name)
+            if local_file is None:
+                logger.debug(f"Asset '{asset_name}' not found on Master AssetHub (likely a character). Skipping JIT sync.")
+                return
             
+            # Check if this exact file version is already synced to this project
+            if (project_url, local_file.name) in self.synced_project_files:
+                logger.debug(f"Asset file '{local_file.name}' is already up-to-date in project '{project_url}'. Skipping upload.")
+                return
+
             # Infer kind from extension if not provided or if it defaults to IMAGE
             # since executor sometimes calls this without knowing the exact kind.
             ext = local_file.suffix.lower()
@@ -93,6 +122,7 @@ class AssetSyncer:
             elif kind == AssetKind.CHARACTER:
                 logger.warning("AssetKind.CHARACTER should use sync_character_to_flow_project directly.")
                 
+            self.synced_project_files.add((project_url, local_file.name))
             logger.info(f"Asset '{asset_name}' successfully synced into Flow project.")
         except Exception as e:
             kind_val = kind.value if kind else "unknown"

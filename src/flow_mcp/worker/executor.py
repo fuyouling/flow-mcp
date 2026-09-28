@@ -41,7 +41,6 @@ class WorkerExecutor:
         self.master_http_url = (master_http_url or settings.master_http_url).rstrip("/")
         self.on_project_mapping_added = on_project_mapping_added
         self.project_mappings: dict[str, str] = {}
-        self.cached_assets: set[str] = set()
 
     async def ensure_project_url(self, project_alias: str) -> str:
         """Resolve project alias to local Flow project URL."""
@@ -120,23 +119,20 @@ class WorkerExecutor:
 
         # JIT Asset Sync
         for asset in task.required_assets:
-            if asset not in self.cached_assets:
-                logger.info(f"JIT syncing required asset '{asset}' before executing {task.job_id}")
-                await self.asset_syncer.sync_to_flow_project(tab, project_url, asset)
-                self.cached_assets.add(asset)
+            logger.info(f"JIT syncing required asset '{asset}' before executing {task.job_id}")
+            await self.asset_syncer.sync_to_flow_project(tab, project_url, asset)
 
         # ── 1. Broadcast Image ─────────────────────────────
         if task_type == TaskType.BROADCAST_IMAGE:
             asset_name = params.get("asset_name", "")
-            if asset_name and asset_name not in self.cached_assets:
+            if asset_name:
                 await self.asset_syncer.sync_to_flow_project(tab, project_url, asset_name, AssetKind.IMAGE)
-                self.cached_assets.add(asset_name)
             return {"status": "broadcast_success", "asset_name": asset_name}, []
 
         # ── 2. Broadcast Character ─────────────────────────
         elif task_type == TaskType.BROADCAST_CHARACTER:
             character_name = params.get("character_name", "")
-            if character_name and character_name not in self.cached_assets:
+            if character_name:
                 has_portrait = params.get("has_portrait", False)
                 has_fullbody = params.get("has_fullbody", False)
                 voice_name = params.get("voice_name", "")
@@ -151,7 +147,6 @@ class WorkerExecutor:
                     voice_name, 
                     voice_style
                 )
-                self.cached_assets.add(character_name)
             return {"status": "broadcast_success", "character_name": character_name}, []
 
         # ── 3. Video Create ────────────────────────────────
