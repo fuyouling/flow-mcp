@@ -56,22 +56,48 @@ class AssetSyncer:
         tab,
         project_url: str,
         asset_name: str,
-        kind: AssetKind = AssetKind.IMAGE,
+        kind: AssetKind | None = None,
     ) -> None:
         """Ensure asset is uploaded to the specified Flow project."""
-        local_file = await self.download_from_hub(asset_name)
+        try:
+            local_file = await self.download_from_hub(asset_name)
+            
+            # Infer kind from extension if not provided or if it defaults to IMAGE
+            # since executor sometimes calls this without knowing the exact kind.
+            ext = local_file.suffix.lower()
+            if kind is None or kind == AssetKind.IMAGE:
+                if ext in [".mp4", ".mov", ".webm", ".avi", ".mkv"]:
+                    kind = AssetKind.VIDEO
+                else:
+                    kind = AssetKind.IMAGE
 
-        logger.info(f"Syncing asset '{asset_name}' ({kind.value}) to project {project_url}...")
-        if kind == AssetKind.IMAGE:
-            page = ImagePage(tab)
-            page.upload_image_on_project_page(
-                project_url=project_url,
-                image_path=str(local_file),
-                target_name=asset_name,
-            )
-        elif kind == AssetKind.CHARACTER:
-            logger.warning("AssetKind.CHARACTER should use sync_character_to_flow_project directly.")
-        logger.info(f"Asset '{asset_name}' successfully synced into Flow project.")
+            logger.info(f"Syncing asset '{asset_name}' ({kind.value}) to project {project_url}...")
+            
+            if kind == AssetKind.IMAGE:
+                logger.debug(f"Uploading image asset '{asset_name}'...")
+                page = ImagePage(tab)
+                page.upload_image_on_project_page(
+                    project_url=project_url,
+                    image_path=str(local_file),
+                    target_name=asset_name,
+                )
+            elif kind == AssetKind.VIDEO:
+                logger.debug(f"Uploading video asset '{asset_name}'...")
+                from flow_mcp.pages.video_page import VideoPage
+                page = VideoPage(tab)
+                page.upload_video_on_project_page(
+                    project_url=project_url,
+                    video_path=str(local_file),
+                    target_name=asset_name,
+                )
+            elif kind == AssetKind.CHARACTER:
+                logger.warning("AssetKind.CHARACTER should use sync_character_to_flow_project directly.")
+                
+            logger.info(f"Asset '{asset_name}' successfully synced into Flow project.")
+        except Exception as e:
+            kind_val = kind.value if kind else "unknown"
+            logger.error(f"Failed to sync asset '{asset_name}' ({kind_val}) to project {project_url}: {e}")
+            raise
 
     async def sync_character_to_flow_project(
         self,
@@ -86,27 +112,44 @@ class AssetSyncer:
         """Download character assets and recreate the character on the worker's project."""
         logger.info(f"Syncing character '{character_name}' to project {project_url}...")
         
-        portrait_local = None
-        if has_portrait:
-            portrait_local = await self.download_from_hub(f"{character_name}_Portrait")
+        try:
+            portrait_local = None
+            if has_portrait:
+                logger.debug(f"Downloading portrait for character '{character_name}'...")
+                portrait_local = await self.download_from_hub(f"{character_name}_Portrait")
+                
+            fullbody_local = None
+            if has_fullbody:
+                logger.debug(f"Downloading fullbody for character '{character_name}'...")
+                fullbody_local = await self.download_from_hub(f"{character_name}_Fullbody")
+                
+            page = CharacterPage(tab)
+            logger.debug(f"Navigating to characters tab for project '{project_url}'...")
+            page.navigate_to_characters(project_url)
             
-        fullbody_local = None
-        if has_fullbody:
-            fullbody_local = await self.download_from_hub(f"{character_name}_Fullbody")
+            logger.debug(f"Clicking 'New Character' for '{character_name}'...")
+            if not page.click_new_character():
+                logger.warning(f"Failed to click 'New Character' or editor not ready for '{character_name}'.")
             
-        page = CharacterPage(tab)
-        page.navigate_to_characters(project_url)
-        page.click_new_character()
-        
-        if portrait_local:
-            page.upload_portrait(str(portrait_local))
+            if portrait_local:
+                logger.debug(f"Uploading portrait for character '{character_name}'...")
+                page.upload_portrait(str(portrait_local))
+                
+            if fullbody_local:
+                logger.debug(f"Uploading fullbody for character '{character_name}'...")
+                page.upload_fullbody(str(fullbody_local))
+                
+            if voice_name:
+                logger.debug(f"Configuring voice '{voice_name}' for character '{character_name}'...")
+                page.configure_voice(voice_name, voice_style)
+                
+            logger.debug(f"Renaming character to '{character_name}'...")
+            page.rename_character(character_name)
             
-        if fullbody_local:
-            page.upload_fullbody(str(fullbody_local))
+            logger.debug(f"Saving character '{character_name}'...")
+            page.save_character()
+            logger.info(f"Character '{character_name}' successfully synced into Flow project.")
             
-        if voice_name:
-            page.configure_voice(voice_name, voice_style)
-            
-        page.rename_character(character_name)
-        page.save_character()
-        logger.info(f"Character '{character_name}' successfully synced into Flow project.")
+        except Exception as e:
+            logger.error(f"Failed to sync character '{character_name}' to project {project_url}: {e}")
+            raise

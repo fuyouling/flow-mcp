@@ -21,8 +21,8 @@ class CharacterPage(BasePage):
         super().__init__(tab)
         self.is_first_character: bool = False
 
-    def navigate_to_characters(self, project_url: str) -> bool:
-        """Navigate to project characters tab and check if it's the project's first character."""
+    def navigate_to_characters(self, project_url: str) -> None:
+        """Navigate to project characters tab."""
         logger.info(f"Navigating to characters tab at {project_url}...")
         # Always force refresh to ensure clean state and clear any lingering dialogs
         self.tab.get(project_url)
@@ -44,45 +44,32 @@ class CharacterPage(BasePage):
         else:
             logger.warning("Character button not found in sidebar.")
 
-        # 判断是否可以找到按钮 xpath 定位 //span[text()="上传"]
-        # 如果有说明是该项目第一个角色，无需点击按钮 新角色
-        upload_btn = self.find_button('xpath://span[text()="上传"]', name="首角色'上传'按钮", timeout=2)
-        if upload_btn:
-            logger.info("Found Upload button (//span[text()='上传']), indicating this is the first character in the project.")
-            self.is_first_character = True
-        else:
-            self.is_first_character = False
-
-        return self.is_first_character
-
     def click_new_character(self) -> bool:
-        """Click 'New Character' button if not already on the first character page."""
-        if getattr(self, "is_first_character", False):
-            logger.info("Project has no existing characters (first character); skipping 'New Character' button click and proceeding directly.")
-            return True
-
-        if self.find_button('xpath://span[text()="上传"]', name="首角色'上传'按钮(检查)", timeout=1, silent_fail=True):
-            logger.info("Found Upload button (//span[text()='上传']); skipping 'New Character' button click and proceeding directly.")
-            self.is_first_character = True
-            return True
-
-        logger.info("Clicking 'New Character' button...")
+        """Click 'New Character' button if available, otherwise assume it's the first character."""
+        logger.info("Attempting to click 'New Character' button...")
+        
         new_btn = self.find_button(
             'xpath://button[contains(., "新角色") or contains(., "新建角色") or contains(., "创建角色") or contains(., "New Character")]',
             name="'新角色'按钮",
             timeout=3,
+            silent_fail=True,
         )
         if new_btn:
             self.click_btn(new_btn, name="'新角色'按钮")
             time.sleep(2.5)
-            logger.info("Clicked New Character.")
+            logger.info("Clicked 'New Character' button.")
         else:
-            logger.warning("New Character button not found. Checking if editor is ready.")
+            logger.info("'New Character' button not found. Checking if we are on the first character empty state...")
+            upload_btn = self.find_button('xpath://span[text()="上传"]', name="'上传'按钮(检查首角色)", timeout=2, silent_fail=True)
+            if upload_btn:
+                logger.info("Found Upload button, assuming this is the first character in the project.")
+            else:
+                logger.warning("Neither 'New Character' nor 'Upload' button found. Editor might not be ready.")
 
         # Verify editor is ready
         editor = self.find_element(["css:.ProseMirror", "css:textarea"], name="角色编辑器输入框", timeout=3, silent_fail=True)
         if not editor:
-            logger.error("Editor not found after clicking New Character.")
+            logger.error("Editor not found after attempting to create new character.")
             return False
         return True
 
