@@ -295,9 +295,9 @@ class VideoPage(BasePage):
     ) -> dict[str, Any]:
         """Execute full video creation flow."""
         logger.info(f"Generating video in {project_url} with model {model_name}, mode={mode}...")
-        if self.tab.url != project_url:
-            self.tab.get(project_url)
-            time.sleep(3)
+        # Always refresh the page to ensure a clean state (empty prompt, no old assets) for the new task
+        self.tab.get(project_url)
+        time.sleep(3)
 
         self.check_and_handle_refresh_prompt()
 
@@ -322,21 +322,31 @@ class VideoPage(BasePage):
         self.enter_prompt(prompt)
         time.sleep(0.5)
 
+        tiles_before = len(self.tab.eles("xpath://flow-grid-tile-container", timeout=0.1))
+
         submit_btn = self.find_button('xpath://button[@type="submit"]', name="视频生成提交按钮", timeout=5)
         if not submit_btn or submit_btn.attr("disabled"):
             raise RuntimeError("Video submit button not clickable.")
 
         self.click_btn(submit_btn, name="视频生成提交按钮")
-        logger.info("Clicked generate video button, polling progress...")
+        logger.info(f"Clicked generate video button (tiles before: {tiles_before}), polling progress...")
 
         start_time = time.time()
         loading_xpath = 'xpath://div[@class="loading-percentage"]'
 
-        # Wait for loading to start
-        for _ in range(40):
+        # Wait for loading to start or new tile to appear
+        generation_started = False
+        for _ in range(60):
             if self.tab.ele(loading_xpath, timeout=0.5):
+                generation_started = True
+                break
+            if len(self.tab.eles("xpath://flow-grid-tile-container", timeout=0.1)) > tiles_before:
+                generation_started = True
                 break
             time.sleep(0.5)
+            
+        if not generation_started:
+            raise RuntimeError("Video generation did not start within 30 seconds (no new tile or loading indicator found).")
 
         # Poll percentage until completed
         while time.time() - start_time < timeout:

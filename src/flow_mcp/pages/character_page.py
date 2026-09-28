@@ -24,9 +24,9 @@ class CharacterPage(BasePage):
     def navigate_to_characters(self, project_url: str) -> bool:
         """Navigate to project characters tab and check if it's the project's first character."""
         logger.info(f"Navigating to characters tab at {project_url}...")
-        if self.tab.url != project_url:
-            self.tab.get(project_url)
-            time.sleep(3)
+        # Always force refresh to ensure clean state and clear any lingering dialogs
+        self.tab.get(project_url)
+        time.sleep(3)
 
         self.check_and_handle_refresh_prompt()
 
@@ -561,7 +561,7 @@ class CharacterPage(BasePage):
 
     def list_characters(self, project_url: str = "") -> list[dict[str, Any]]:
         """List all characters in the project."""
-        if project_url and project_url not in (self.tab.url or ""):
+        if project_url:
             self.tab.get(project_url)
             time.sleep(3)
 

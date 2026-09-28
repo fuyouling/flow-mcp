@@ -219,9 +219,10 @@ class ImagePage(BasePage):
         Execute full image creation flow in the specified project.
         """
         logger.info(f"Generating image in {project_url} with prompt: {prompt[:40]}...")
-        if self.tab.url != project_url:
-            self.tab.get(project_url)
-            time.sleep(3)
+        
+        # Always force refresh to ensure clean state and clear any lingering dialogs
+        self.tab.get(project_url)
+        time.sleep(3)
 
         self.check_and_handle_refresh_prompt()
 
@@ -246,10 +247,15 @@ class ImagePage(BasePage):
         loading_xpath = 'xpath://div[@class="loading-percentage"]'
 
         # Wait for loading to start
-        for _ in range(40):
+        loading_started = False
+        for _ in range(60):
             if self.tab.ele(loading_xpath, timeout=0.5):
+                loading_started = True
                 break
             time.sleep(0.5)
+            
+        if not loading_started:
+            raise RuntimeError("Image generation failed to start (loading indicator not found within 30s).")
 
         # Poll percentage until completed
         while time.time() - start_time < timeout:
@@ -305,7 +311,7 @@ class ImagePage(BasePage):
 
     def list_images(self, project_url: str = "") -> list[dict[str, Any]]:
         """List all images in the project."""
-        if project_url and project_url not in (self.tab.url or ""):
+        if project_url:
             self.tab.get(project_url)
             time.sleep(3)
 
@@ -345,7 +351,7 @@ class ImagePage(BasePage):
         abs_path = str(path_obj.resolve())
         file_stem = path_obj.stem
 
-        if project_url not in (self.tab.url or ""):
+        if project_url:
             self.tab.get(project_url)
             time.sleep(3)
 
